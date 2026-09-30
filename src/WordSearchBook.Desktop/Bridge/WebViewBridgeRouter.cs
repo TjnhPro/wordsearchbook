@@ -1,9 +1,11 @@
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WordSearchBook.Core.Application;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Desktop.Bridge;
 
@@ -43,6 +45,7 @@ public sealed class WebViewBridgeRouter(
                 "book.generate" => await StartGenerationAsync(request, cancellationToken),
                 "book.brand.assign" => await SaveAssignmentAsync(request, cancellationToken),
                 "brand.create" => await CreateBrandAsync(request, cancellationToken),
+                "brand.layout.validate" => await ValidateBrandLayoutAsync(request, cancellationToken),
                 "settings.global.save" => await SaveGlobalSettingsAsync(request, cancellationToken),
                 "settings.brand.save" => await SaveBrandSettingsAsync(request, cancellationToken),
                 "task.list" => Success(
@@ -108,6 +111,20 @@ public sealed class WebViewBridgeRouter(
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
     }
 
+    private async ValueTask<BridgeResponse> ValidateBrandLayoutAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var brandId = ReadSafeBrandId(request.Payload);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.BrandPageLayoutValidation,
+            $"brand-layout:{brandId}",
+            brandId,
+            new BrandPageLayoutValidationRequest(rootProvider.RootPath, brandId),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
     private async ValueTask<BridgeResponse> SaveGlobalSettingsAsync(
         BridgeRequest request,
         CancellationToken cancellationToken)
@@ -154,12 +171,24 @@ public sealed class WebViewBridgeRouter(
         }
 
         WorkspaceSnapshot? result = null;
+        BrandValidationResult? brandValidationResult = null;
         if (task.State == BackgroundTaskState.Completed)
         {
-            taskManager.TryGetResult(taskId, out result);
+            if (taskManager.TryGetResult<BrandPageLayoutValidationTaskResult>(taskId, out var validationTaskResult))
+            {
+                result = validationTaskResult!.Snapshot;
+                brandValidationResult = validationTaskResult.Validation;
+            }
+            else
+            {
+                taskManager.TryGetResult(taskId, out result);
+            }
         }
 
-        return Success(request.Id!, "background.task.detail", new BackgroundTaskDetail(BackgroundTaskBridgeSnapshot.From(task), result));
+        return Success(
+            request.Id!,
+            "background.task.detail",
+            new BackgroundTaskDetail(BackgroundTaskBridgeSnapshot.From(task), result, brandValidationResult));
     }
 
     private async ValueTask<BridgeResponse> CancelTaskAsync(BridgeRequest request, CancellationToken cancellationToken)
@@ -196,6 +225,27 @@ public sealed class WebViewBridgeRouter(
         }
 
         return taskId;
+    }
+
+    private static string ReadSafeBrandId(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } value ||
+            !value.TryGetProperty("brandId", out var brandValue))
+        {
+            throw new ArgumentException("brandId is required.");
+        }
+
+        var brandId = brandValue.GetString();
+        ArgumentException.ThrowIfNullOrWhiteSpace(brandId);
+        if (brandId is "." or ".." ||
+            brandId.Contains('/') ||
+            brandId.Contains('\\') ||
+            brandId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("brandId must be a single safe path segment.");
+        }
+
+        return brandId;
     }
 
     private static T ReadSettings<T>(JsonElement? payload)

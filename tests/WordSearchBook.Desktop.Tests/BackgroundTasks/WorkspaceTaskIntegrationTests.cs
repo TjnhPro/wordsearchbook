@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
-using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Desktop.BackgroundTasks;
 using WordSearchBook.Infrastructure.DependencyInjection;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
@@ -55,8 +54,15 @@ public sealed class WorkspaceTaskIntegrationTests
             services.AddSingleton<IBookBrandAssignmentStore>(new EmptyAssignmentStore());
             using var provider = services.BuildServiceProvider();
             using var manager = new BackgroundTaskManager(provider);
-            var validation = await provider.GetRequiredService<IBrandValidationService>().ValidateAsync(root, "demo");
-            Assert.True(validation.IsSuccess);
+            var validationTask = await manager.StartAsync(
+                BackgroundTaskKind.BrandPageLayoutValidation,
+                "brand-layout:demo",
+                "demo",
+                new BrandPageLayoutValidationRequest(root, "demo"));
+            Assert.True(await manager.WaitAsync(validationTask.TaskId, TimeSpan.FromSeconds(10)));
+            Assert.Equal(BackgroundTaskState.Completed, (await manager.GetAsync(validationTask.TaskId))!.State);
+            Assert.True(manager.TryGetResult<BrandPageLayoutValidationTaskResult>(validationTask.TaskId, out var validationResult));
+            Assert.True(validationResult!.Validation.IsSuccess);
 
             var task = await manager.StartAsync(
                 BackgroundTaskKind.BookGeneration,

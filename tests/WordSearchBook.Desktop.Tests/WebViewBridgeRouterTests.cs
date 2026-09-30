@@ -3,6 +3,7 @@ using System.Text.Json;
 using WordSearchBook.Core.Application;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Desktop.Bridge;
 
 namespace WordSearchBook.Desktop.Tests;
@@ -117,6 +118,73 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
+    public async Task EnqueuesTypedBrandLayoutValidation()
+    {
+        var router = CreateRouter(out var manager);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"brand-validation-1","type":"brand.layout.validate","payload":{"brandId":"demo"}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(BackgroundTaskKind.BrandPageLayoutValidation, manager.LastKind);
+        var request = Assert.IsType<BrandPageLayoutValidationRequest>(manager.LastRequest);
+        Assert.Equal("demo", request.BrandId);
+        Assert.Equal(Path.GetFullPath("application-root"), request.RootPath);
+    }
+
+    [Theory]
+    [InlineData("../demo")]
+    [InlineData("a/b")]
+    [InlineData("a\\b")]
+    public async Task RejectsUnsafeBrandLayoutValidationPayload(string brandId)
+    {
+        var router = CreateRouter(out var manager);
+        var message = JsonSerializer.Serialize(new
+        {
+            id = "brand-validation-invalid",
+            type = "brand.layout.validate",
+            payload = new { brandId }
+        });
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(message));
+
+        Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("invalid_payload", response.RootElement.GetProperty("error").GetProperty("code").GetString());
+        Assert.Null(manager.LastKind);
+    }
+
+    [Fact]
+    public async Task TaskDetailMapsValidationSnapshotAndFailuresWithoutChangingResultShape()
+    {
+        var router = CreateRouter(out var manager);
+        var snapshot = new WorkspaceSnapshot(
+            Path.GetFullPath("application-root"),
+            null,
+            null,
+            [],
+            [],
+            DateTimeOffset.UtcNow);
+        var validation = new BrandValidationResult(
+            new BrandValidationState(BrandValidationStatus.NotValidated),
+            [new BrandValidationFailure("page_layout.png", "exists", "page_layout_not_found", "Missing")]);
+        var taskId = manager.AddCompleted(new BrandPageLayoutValidationTaskResult(snapshot, validation));
+        var message = JsonSerializer.Serialize(new
+        {
+            id = "task-detail-1",
+            type = "task.get",
+            payload = new { taskId = taskId.Value }
+        });
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(message));
+
+        var data = response.RootElement.GetProperty("data");
+        Assert.Equal(snapshot.RootPath, data.GetProperty("result").GetProperty("rootPath").GetString());
+        Assert.Equal(
+            "page_layout_not_found",
+            data.GetProperty("brandValidationResult").GetProperty("failures")[0].GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task EnqueuesTypedBrandSettingsSave()
     {
         var router = CreateRouter(out var manager);
@@ -179,10 +247,32 @@ public sealed class WebViewBridgeRouterTests
     private sealed class StubTaskManager : IBackgroundTaskManager
     {
         private readonly Dictionary<BackgroundTaskId, BackgroundTaskSnapshot> tasks = [];
+        private readonly Dictionary<BackgroundTaskId, object> results = [];
 
         public BackgroundTaskKind? LastKind { get; private set; }
 
         public object? LastRequest { get; private set; }
+
+        public BackgroundTaskId AddCompleted(object result)
+        {
+            var taskId = BackgroundTaskId.New();
+            tasks.Add(taskId, new BackgroundTaskSnapshot(
+                taskId,
+                BackgroundTaskKind.BrandPageLayoutValidation,
+                BackgroundTaskState.Completed,
+                "brand-layout:demo",
+                "demo",
+                "Refreshing workspace",
+                null,
+                null,
+                null,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow,
+                null,
+                null));
+            results.Add(taskId, result);
+            return taskId;
+        }
 
         public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(
             BackgroundTaskKind kind,
@@ -214,6 +304,12 @@ public sealed class WebViewBridgeRouterTests
 
         public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result)
         {
+            if (results.TryGetValue(taskId, out var value) && value is TResult typed)
+            {
+                result = typed;
+                return true;
+            }
+
             result = default;
             return false;
         }

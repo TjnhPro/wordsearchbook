@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Desktop.Bridge;
 
@@ -39,4 +40,7 @@ internal sealed record BackgroundTaskBridgeSnapshot(
         snapshot.ErrorMessage);
 }
 
-internal sealed record BackgroundTaskDetail(BackgroundTaskBridgeSnapshot Task, WorkspaceSnapshot? Result);
+internal sealed record BackgroundTaskDetail(
+    BackgroundTaskBridgeSnapshot Task,
+    WorkspaceSnapshot? Result,
+    BrandValidationResult? BrandValidationResult = null);

@@ -2,6 +2,7 @@ using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Core.Application.Workspace;
 
@@ -120,6 +121,33 @@ public sealed class BrandCreateWorker(
             await settingsWriter.CreateBrandAsync(request.RootPath, request.BrandId, cancellationToken);
             context.Report("Refreshing workspace", subject: request.BrandId);
             return await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
+        }
+        catch (WordSearchGenerationException exception)
+        {
+            throw new BackgroundTaskFailureException(exception.Code, exception.Message);
+        }
+    }
+}
+
+public sealed class BrandPageLayoutValidationWorker(
+    IBrandValidationService validationService,
+    IWorkspaceSnapshotService snapshotService)
+    : BackgroundTaskWorker<BrandPageLayoutValidationRequest, BrandPageLayoutValidationTaskResult>
+{
+    public override BackgroundTaskKind Kind => BackgroundTaskKind.BrandPageLayoutValidation;
+
+    protected override async ValueTask<BrandPageLayoutValidationTaskResult> ExecuteTypedAsync(
+        BrandPageLayoutValidationRequest request,
+        IBackgroundTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            context.Report("Validating page layout", subject: request.BrandId);
+            var validation = await validationService.ValidateAsync(request.RootPath, request.BrandId, cancellationToken);
+            context.Report("Refreshing workspace", subject: request.BrandId);
+            var snapshot = await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
+            return new BrandPageLayoutValidationTaskResult(snapshot, validation);
         }
         catch (WordSearchGenerationException exception)
         {

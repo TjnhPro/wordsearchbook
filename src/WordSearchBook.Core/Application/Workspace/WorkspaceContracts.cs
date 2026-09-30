@@ -34,6 +34,12 @@ public sealed record BookBrandAssignmentTaskRequest(string RootPath, string Book
 
 public sealed record BrandCreateTaskRequest(string RootPath, string BrandId);
 
+public sealed record BrandPageLayoutValidationRequest(string RootPath, string BrandId);
+
+public sealed record BrandPageLayoutValidationTaskResult(
+    WorkspaceSnapshot Snapshot,
+    BrandValidationResult Validation);
+
 public abstract record SettingsSaveTaskRequest(string RootPath);
 
 public sealed record GlobalSettingsSaveTaskRequest(
