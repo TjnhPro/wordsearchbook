@@ -22,16 +22,37 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         string brandId,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-        ValidatePathSegment(brandId, nameof(brandId));
-
-        var globalPath = Path.Combine(rootPath, "settings.json");
-        var brandPath = Path.Combine(rootPath, "brands", brandId, "settings.json");
-
-        var global = await ReadJsonAsync<GlobalWordSearchSettings>(globalPath, cancellationToken);
-        var brand = await ReadJsonAsync<BrandWordSearchSettings>(brandPath, cancellationToken);
-        Validate(global, brand);
+        var global = await ReadGlobalAsync(rootPath, cancellationToken);
+        var brand = await ReadBrandAsync(rootPath, brandId, global, cancellationToken);
         return new WordSearchSettingsBundle(global, brand);
+    }
+
+    public async Task<GlobalWordSearchSettings> ReadGlobalAsync(
+        string rootPath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        var global = await ReadJsonAsync<GlobalWordSearchSettings>(
+            Path.Combine(rootPath, "settings.json"),
+            cancellationToken);
+        ValidateGlobal(global);
+        return global;
+    }
+
+    public async Task<BrandWordSearchSettings> ReadBrandAsync(
+        string rootPath,
+        string brandId,
+        GlobalWordSearchSettings global,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ArgumentNullException.ThrowIfNull(global);
+        ValidatePathSegment(brandId, nameof(brandId));
+        var brand = await ReadJsonAsync<BrandWordSearchSettings>(
+            Path.Combine(rootPath, "brands", brandId, "settings.json"),
+            cancellationToken);
+        ValidateBrand(global, brand);
+        return brand;
     }
 
     private static async Task<T> ReadJsonAsync<T>(string path, CancellationToken cancellationToken)
@@ -65,7 +86,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         }
     }
 
-    private static void Validate(GlobalWordSearchSettings global, BrandWordSearchSettings brand)
+    private static void ValidateGlobal(GlobalWordSearchSettings global)
     {
         if (global.Board is null || global.Page is null)
         {
@@ -84,6 +105,10 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
             throw Invalid("Page width and height must be positive.");
         }
 
+    }
+
+    private static void ValidateBrand(GlobalWordSearchSettings global, BrandWordSearchSettings brand)
+    {
         ValidateRegion("topic", brand.Topic, global.Page);
         ValidateRegion("boardGame", brand.BoardGame, global.Page);
         ValidateRegion("keywordList", brand.KeywordList, global.Page);

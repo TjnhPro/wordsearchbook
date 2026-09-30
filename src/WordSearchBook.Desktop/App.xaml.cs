@@ -18,6 +18,7 @@ public partial class App : Application
         var services = new ServiceCollection();
         services.AddWordSearchBookInfrastructure();
         services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
+        services.AddSingleton<IApplicationRootProvider, ExecutableApplicationRootProvider>();
         services.AddSingleton<WebViewBridgeRouter>();
         services.AddSingleton<MainWindow>();
 

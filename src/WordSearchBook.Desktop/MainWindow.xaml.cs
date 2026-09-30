@@ -43,7 +43,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         string? message;
         try
@@ -55,7 +55,7 @@ public partial class MainWindow : Window
             message = null;
         }
 
-        Browser.CoreWebView2.PostWebMessageAsJson(bridgeRouter.Handle(message));
+        Browser.CoreWebView2.PostWebMessageAsJson(await bridgeRouter.HandleAsync(message));
     }
 
     internal static string GetWebViewUserDataFolder() =>
