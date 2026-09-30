@@ -16,11 +16,11 @@ public sealed class WordSearchDomainContractTests
     }
 
     [Fact]
-    public void DescribesAllFiveArtifactKinds()
+    public void DescribesOnlyBoardImageArtifactKindsInCurrentPhase()
     {
         var kinds = Enum.GetValues<WordSearchArtifactKind>();
 
-        Assert.Equal(5, kinds.Length);
+        Assert.Equal(2, kinds.Length);
         Assert.Contains(WordSearchArtifactKind.BoardGame, kinds);
         Assert.Contains(WordSearchArtifactKind.BoardGameAnswer, kinds);
     }

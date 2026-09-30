@@ -12,7 +12,6 @@ public sealed class WordSearchBookGenerationService(
     IWordSearchSettingsReader settingsReader,
     IWordSearchPuzzleGenerator puzzleGenerator,
     IWordSearchBoardRenderer boardRenderer,
-    IWordSearchTextArtifactRenderer textRenderer,
     IWordSearchCachePublisher cachePublisher) : IWordSearchBookGenerationService
 {
     public async Task<WordSearchGenerationResult> GenerateAsync(
@@ -45,17 +44,12 @@ public sealed class WordSearchBookGenerationService(
                 settings.Global.Board);
             var artifacts = new RenderedWordSearchArtifact[]
             {
-                textRenderer.RenderTopic(topic.Name, settings.Brand.Topic),
                 boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame),
                 boardRenderer.RenderAnswer(
                     puzzle,
                     settings.Global.Board,
                     settings.Brand.BoardGame,
-                    settings.Brand.AnswerLine),
-                textRenderer.RenderKeywordList(
-                    topic.Entries.Select(entry => entry.Keyword).ToArray(),
-                    settings.Brand.KeywordList),
-                textRenderer.RenderPageNumber(topic.Index, settings.Brand.PageNumber)
+                    settings.Brand.AnswerLine)
             };
 
             generatedTopics.Add(new WordSearchTopicArtifactSet(topic, artifacts, puzzle.Placements));

@@ -188,21 +188,15 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
 
     private static string FileName(WordSearchArtifactKind kind) => kind switch
     {
-        WordSearchArtifactKind.Topic => "topic.png",
         WordSearchArtifactKind.BoardGame => "board-game.png",
         WordSearchArtifactKind.BoardGameAnswer => "board-game-answer.png",
-        WordSearchArtifactKind.KeywordList => "keyword-list.png",
-        WordSearchArtifactKind.PageNumber => "page-number.png",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 
     private static string ManifestName(WordSearchArtifactKind kind) => kind switch
     {
-        WordSearchArtifactKind.Topic => "topic",
         WordSearchArtifactKind.BoardGame => "boardGame",
         WordSearchArtifactKind.BoardGameAnswer => "boardGameAnswer",
-        WordSearchArtifactKind.KeywordList => "keywordList",
-        WordSearchArtifactKind.PageNumber => "pageNumber",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 

@@ -44,18 +44,15 @@ Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tê
 
 Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
 
-`IWordSearchBookGenerationService` sinh năm PNG cho mỗi Topic và publish atomically vào:
+`IWordSearchBookGenerationService` hiện chỉ sinh hai PNG board cho mỗi Topic và publish atomically vào. Topic, keyword list và page number sẽ được draw ở phase sau.
 
 ```text
 input/{book}/.workspace/cache/{brand}/
 ├─ manifest.json
 └─ topics/
    └─ 001/
-      ├─ topic.png
       ├─ board-game.png
-      ├─ board-game-answer.png
-      ├─ keyword-list.png
-      └─ page-number.png
+      └─ board-game-answer.png
 ```
 
 Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách nhiệm CSV/JSON, System.Drawing và filesystem cache. Desktop/UI chưa sử dụng workflow này trong phase hiện tại.

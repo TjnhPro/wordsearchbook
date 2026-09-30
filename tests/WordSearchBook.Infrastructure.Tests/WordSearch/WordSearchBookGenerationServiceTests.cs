@@ -9,7 +9,7 @@ namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 public sealed class WordSearchBookGenerationServiceTests
 {
     [Fact]
-    public async Task GeneratesFiveArtifactsAndManifestThenAtomicallyReplacesCache()
+    public async Task GeneratesTwoBoardArtifactsAndManifestThenAtomicallyReplacesCache()
     {
         var root = CopyFixtureToTemporaryRoot();
         try
@@ -21,7 +21,10 @@ public sealed class WordSearchBookGenerationServiceTests
             var result = await service.GenerateAsync(request);
 
             var topic = Assert.Single(result.Topics);
-            Assert.Equal(5, topic.Artifacts.Count);
+            Assert.Equal(2, topic.Artifacts.Count);
+            Assert.Equal(
+                [WordSearchArtifactKind.BoardGame, WordSearchArtifactKind.BoardGameAnswer],
+                topic.Artifacts.Select(artifact => artifact.Kind));
             Assert.Equal(20, topic.Placements.Count);
             Assert.True(File.Exists(result.ManifestPath));
             var cacheDirectory = Path.GetDirectoryName(result.ManifestPath)!;
@@ -36,6 +39,7 @@ public sealed class WordSearchBookGenerationServiceTests
                 Assert.Equal("RED PANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("keyword").GetString());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("entries").GetArrayLength());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("placements").GetArrayLength());
+                Assert.Equal(2, manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").EnumerateObject().Count());
             }
 
             var sentinel = Path.Combine(cacheDirectory, "old-cache.txt");
@@ -104,7 +108,7 @@ public sealed class WordSearchBookGenerationServiceTests
 
             Assert.Equal(2, result.Topics.Count);
             Assert.Equal([1, 2], result.Topics.Select(topic => topic.Index));
-            Assert.All(result.Topics, topic => Assert.Equal(5, topic.Artifacts.Count));
+            Assert.All(result.Topics, topic => Assert.Equal(2, topic.Artifacts.Count));
             Assert.Contains(result.Topics[1].Artifacts, artifact => artifact.RelativePath.StartsWith("topics/002/", StringComparison.Ordinal));
         }
         finally

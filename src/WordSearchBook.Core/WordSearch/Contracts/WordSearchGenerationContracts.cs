@@ -4,11 +4,8 @@ namespace WordSearchBook.Core.WordSearch.Contracts;
 
 public enum WordSearchArtifactKind
 {
-    Topic,
     BoardGame,
-    BoardGameAnswer,
-    KeywordList,
-    PageNumber
+    BoardGameAnswer
 }
 
 public sealed record WordSearchGenerationRequest(
