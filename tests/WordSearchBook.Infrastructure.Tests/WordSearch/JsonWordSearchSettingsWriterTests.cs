@@ -1,3 +1,4 @@
+using System.Drawing;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
@@ -21,6 +22,13 @@ public sealed class JsonWordSearchSettingsWriterTests
             Assert.Equal(2000, created.Brand.BoardGame.Rectangle.Width);
             Assert.Equal("#8B1E1E", created.Brand.AnswerLine.Color);
             Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "settings.json")));
+            var layoutPath = Path.Combine(root, "brands", "new-brand", "page_layout.png");
+            Assert.True(File.Exists(layoutPath));
+            using (var layout = Image.FromFile(layoutPath))
+            {
+                Assert.Equal(2588, layout.Width);
+                Assert.Equal(3375, layout.Height);
+            }
             Assert.Empty(Directory.EnumerateDirectories(Path.Combine(root, "brands"), "*.tmp"));
         }
         finally
@@ -90,6 +98,11 @@ public sealed class JsonWordSearchSettingsWriterTests
 
             Assert.Equal(12, saved.Brand.AnswerLine.Width);
             Assert.Equal("#123456", saved.Brand.AnswerLine.Color);
+            var json = await File.ReadAllTextAsync(Path.Combine(root, "brands", "demo", "settings.json"));
+            Assert.Contains("\"alignment\": \"Center\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"columns\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"stepY\": 80", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"rectangle\"", json.AsSpan(0, json.IndexOf("\"boardGame\"", StringComparison.Ordinal)), StringComparison.Ordinal);
             Assert.Empty(Directory.EnumerateFiles(Path.Combine(root, "brands", "demo"), "*.tmp"));
         }
         finally
@@ -112,7 +125,7 @@ public sealed class JsonWordSearchSettingsWriterTests
             var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
                 writer.SaveGlobalAsync(root, incompatible));
 
-            Assert.Equal("settings_invalid", exception.Code);
+            Assert.Equal("page_size_unsupported", exception.Code);
             Assert.Equal(before, await File.ReadAllBytesAsync(path));
         }
         finally

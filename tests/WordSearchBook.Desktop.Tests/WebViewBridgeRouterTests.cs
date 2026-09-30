@@ -93,12 +93,12 @@ public sealed class WebViewBridgeRouterTests
         var router = CreateRouter(out var manager);
 
         using var response = JsonDocument.Parse(await router.HandleAsync(
-            """{"id":"settings-1","type":"settings.global.save","payload":{"settings":{"board":{"width":20,"height":20},"page":{"width":2400,"height":3000}}}}"""));
+            """{"id":"settings-1","type":"settings.global.save","payload":{"settings":{"board":{"width":20,"height":20},"page":{"width":2588,"height":3375}}}}"""));
 
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal(BackgroundTaskKind.SettingsSave, manager.LastKind);
         var request = Assert.IsType<GlobalSettingsSaveTaskRequest>(manager.LastRequest);
-        Assert.Equal(2400, request.Settings.Page.Width);
+        Assert.Equal(2588, request.Settings.Page.Width);
     }
 
     [Fact]
@@ -120,7 +120,9 @@ public sealed class WebViewBridgeRouterTests
     public async Task EnqueuesTypedBrandSettingsSave()
     {
         var router = CreateRouter(out var manager);
-        const string region = """{"rectangle":{"x":10,"y":20,"width":2000,"height":2000},"font":{"name":"Arial","size":24,"color":"#112233"}}""";
+        const string boardRegion = """{"rectangle":{"x":10,"y":20,"width":2000,"height":2000},"font":{"name":"Arial","size":24,"color":"#112233"}}""";
+        const string textRegion = """{"x":10,"y":20,"font":{"name":"Arial","size":24,"color":"#112233"},"alignment":"Center"}""";
+        const string keywordRegion = """{"columns":[{"x":100,"y":2100},{"x":600,"y":2100},{"x":1100,"y":2100},{"x":1600,"y":2100}],"stepY":60,"font":{"name":"Arial","size":24,"color":"#112233"},"alignment":"Center"}""";
         var message = $$"""
             {
               "id": "brand-settings-1",
@@ -128,10 +130,10 @@ public sealed class WebViewBridgeRouterTests
               "payload": {
                 "brandId": "demo",
                 "settings": {
-                  "topic": {{region}},
-                  "boardGame": {{region}},
-                  "keywordList": {{region}},
-                  "pageNumber": {{region}},
+                  "topic": {{textRegion}},
+                  "boardGame": {{boardRegion}},
+                  "keywordList": {{keywordRegion}},
+                  "pageNumber": {{textRegion}},
                   "answerLine": { "width": 2.5, "color": "#AABBCC" }
                 }
               }
@@ -144,7 +146,7 @@ public sealed class WebViewBridgeRouterTests
         Assert.Equal(BackgroundTaskKind.SettingsSave, manager.LastKind);
         var request = Assert.IsType<BrandSettingsSaveTaskRequest>(manager.LastRequest);
         Assert.Equal("demo", request.BrandId);
-        Assert.Equal(10, request.Settings.Topic.Rectangle.X);
+        Assert.Equal(10, request.Settings.Topic.X);
         Assert.Equal("Arial", request.Settings.BoardGame.Font.Name);
         Assert.Equal(2.5f, request.Settings.AnswerLine.Width);
         Assert.Equal("#AABBCC", request.Settings.AnswerLine.Color);

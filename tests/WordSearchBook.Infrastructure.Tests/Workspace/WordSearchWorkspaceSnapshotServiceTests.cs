@@ -73,7 +73,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
             Assert.NotNull(snapshot.GlobalSettings);
             Assert.Null(snapshot.GlobalSettingsIssue);
             Assert.Equal(20, snapshot.GlobalSettings.Board.Width);
-            Assert.Equal(2400, snapshot.GlobalSettings.Page.Width);
+            Assert.Equal(2588, snapshot.GlobalSettings.Page.Width);
             Assert.True(File.Exists(Path.Combine(root, "settings.json")));
         }
         finally
