@@ -22,6 +22,13 @@ public sealed record WordSearchArtifact(
     int Width,
     int Height);
 
+public sealed record RenderedWordSearchArtifact(
+    WordSearchArtifactKind Kind,
+    byte[] Content,
+    int Width,
+    int Height,
+    string MediaType = "image/png");
+
 public sealed record GeneratedWordSearchTopic(
     int Index,
     string Name,
