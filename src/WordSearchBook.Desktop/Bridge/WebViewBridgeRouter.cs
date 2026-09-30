@@ -42,6 +42,7 @@ public sealed class WebViewBridgeRouter(
                         cancellationToken))),
                 "book.generate" => await StartGenerationAsync(request, cancellationToken),
                 "book.brand.assign" => await SaveAssignmentAsync(request, cancellationToken),
+                "brand.create" => await CreateBrandAsync(request, cancellationToken),
                 "settings.global.save" => await SaveGlobalSettingsAsync(request, cancellationToken),
                 "settings.brand.save" => await SaveBrandSettingsAsync(request, cancellationToken),
                 "task.list" => Success(
@@ -84,6 +85,25 @@ public sealed class WebViewBridgeRouter(
             bookId,
             bookId,
             new BookBrandAssignmentTaskRequest(rootProvider.RootPath, bookId, brandId),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> CreateBrandAsync(BridgeRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Payload is not { ValueKind: JsonValueKind.Object } payload ||
+            !payload.TryGetProperty("brandId", out var brandValue))
+        {
+            throw new ArgumentException("brandId is required.");
+        }
+
+        var brandId = brandValue.GetString();
+        ArgumentException.ThrowIfNullOrWhiteSpace(brandId);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.BrandCreate,
+            brandId,
+            brandId,
+            new BrandCreateTaskRequest(rootProvider.RootPath, brandId),
             cancellationToken);
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
     }

@@ -7,6 +7,74 @@ namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 public sealed class JsonWordSearchSettingsWriterTests
 {
     [Fact]
+    public async Task CreatesNewBrandWithDefaultSettings()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var reader = new JsonWordSearchSettingsReader();
+            var writer = new JsonWordSearchSettingsWriter(reader);
+
+            await writer.CreateBrandAsync(root, "new-brand");
+            var created = await reader.ReadAsync(root, "new-brand");
+
+            Assert.Equal(2000, created.Brand.BoardGame.Rectangle.Width);
+            Assert.Equal("#8B1E1E", created.Brand.AnswerLine.Color);
+            Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "settings.json")));
+            Assert.Empty(Directory.EnumerateDirectories(Path.Combine(root, "brands"), "*.tmp"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RejectsDuplicateBrandWithoutChangingExistingSettings()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var path = Path.Combine(root, "brands", "demo", "settings.json");
+            var before = await File.ReadAllBytesAsync(path);
+            var writer = new JsonWordSearchSettingsWriter(new JsonWordSearchSettingsReader());
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                writer.CreateBrandAsync(root, "demo"));
+
+            Assert.Equal("brand_already_exists", exception.Code);
+            Assert.Equal(before, await File.ReadAllBytesAsync(path));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("CON")]
+    [InlineData("trailing.")]
+    [InlineData("bad:name")]
+    public async Task RejectsInvalidBrandFolderName(string brandId)
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var writer = new JsonWordSearchSettingsWriter(new JsonWordSearchSettingsReader());
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                writer.CreateBrandAsync(root, brandId));
+
+            Assert.Equal("brand_name_invalid", exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SavesExistingBrandAtomicallyAndCanReadItBack()
     {
         var root = CopyFixtureToTemporaryRoot();

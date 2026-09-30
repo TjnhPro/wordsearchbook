@@ -34,13 +34,16 @@
   .topbar-title { @apply mt-0.5 text-lg font-bold text-slate-900; }
   .task-chip { @apply flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600; }
   .task-chip-dot { @apply h-2 w-2 rounded-full bg-slate-400; }
-  .content { @apply min-h-0 flex-1 overflow-auto p-8; }
+  .content { @apply flex min-h-0 flex-1 flex-col overflow-auto p-8; }
   .page-heading { @apply text-2xl font-bold tracking-tight text-slate-950; }
   .page-copy { @apply mt-2 max-w-2xl text-sm leading-6 text-slate-500; }
   .empty-panel { @apply mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm; }
   .empty-panel-title { @apply text-base font-bold text-slate-800; }
   .empty-panel-copy { @apply mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-500; }
   .route-body { @apply mt-6; }
+  .route-page { @apply min-h-0 w-full; }
+  .route-page-fill { @apply flex flex-1 flex-col; }
+  .route-page-fill .route-body { @apply min-h-0 flex-1; }
   .master-detail { @apply grid grid-cols-[minmax(260px,0.8fr)_minmax(420px,2fr)] gap-5; }
   .panel { @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm; }
   .list-panel { @apply p-3; }
@@ -92,4 +95,47 @@
   .settings-grid { @apply grid grid-cols-2 gap-3 lg:grid-cols-4; }
   .setting-field span { @apply mb-1 block text-xs font-semibold text-slate-500; }
   .setting-field input { @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100; }
+  .brand-workspace { @apply grid h-full min-h-0 grid-cols-[minmax(0,4fr)_minmax(0,6fr)] gap-5 overflow-hidden; }
+  .brand-list-panel, .brand-detail-panel { @apply flex min-h-0 flex-col overflow-hidden p-0; }
+  .brand-panel-header { @apply flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 px-5 py-4; }
+  .brand-panel-header h3 { @apply mt-1 text-lg font-bold text-slate-950; }
+  .brand-panel-header p:not(.eyebrow) { @apply mt-1 text-xs text-slate-500; }
+  .brand-save-actions { @apply flex items-center gap-3; }
+  .brand-save-status { @apply text-xs font-semibold; }
+  .brand-save-status[data-state="saved"] { @apply text-emerald-700; }
+  .brand-save-status[data-state="dirty"] { @apply text-amber-700; }
+  .brand-save-status[data-state="saving"] { @apply text-slate-500; }
+  .brand-save-message { @apply mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700; }
+  .brand-list-scroll { @apply min-h-0 flex-1 space-y-1 overflow-y-auto p-3; }
+  .brand-search { @apply block shrink-0 border-b border-slate-100 px-4 py-3; }
+  .brand-search input { @apply w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-100; }
+  .brand-list-empty { @apply px-4 py-10 text-center; }
+  .brand-list-empty strong { @apply text-sm text-slate-700; }
+  .brand-list-empty p { @apply mt-1 text-xs text-slate-500; }
+  .brand-row { @apply flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50; }
+  .brand-row-active { @apply bg-orange-50 hover:bg-orange-50; }
+  .brand-row strong, .brand-row small { @apply block; }
+  .brand-row strong { @apply text-sm font-bold text-slate-900; }
+  .brand-row small { @apply mt-1 text-xs text-slate-500; }
+  .brand-detail-scroll { @apply min-h-0 flex-1 overflow-y-auto p-5; }
+  .brand-region-grid { @apply grid grid-cols-2 gap-4; }
+  .brand-region-card { @apply m-0 min-w-0; }
+  .brand-region-fields { @apply grid grid-cols-2 gap-3; }
+  .answer-styling { @apply mt-4 rounded-xl border border-slate-200 p-4; }
+  .answer-styling summary { @apply cursor-pointer text-sm font-bold text-slate-700; }
+  .unsaved-dialog { @apply w-full max-w-md rounded-2xl border-0 bg-white p-6 text-slate-900 shadow-2xl; }
+  .unsaved-dialog::backdrop { @apply bg-slate-950/40 backdrop-blur-sm; }
+  .unsaved-dialog h2 { @apply text-lg font-bold; }
+  .unsaved-dialog p { @apply mt-2 text-sm leading-6 text-slate-500; }
+  .unsaved-dialog-actions { @apply mt-6 flex justify-end gap-3; }
+  .create-brand-dialog { @apply w-full max-w-md rounded-2xl border-0 bg-white p-6 text-slate-900 shadow-2xl; }
+  .create-brand-dialog::backdrop { @apply bg-slate-950/40 backdrop-blur-sm; }
+  .create-brand-dialog h2 { @apply text-lg font-bold; }
+  .create-brand-dialog > form > p { @apply mt-2 text-sm leading-6 text-slate-500; }
+  .create-brand-field { @apply mt-5 block; }
+  .create-brand-field span { @apply mb-1.5 block text-xs font-bold text-slate-600; }
+  .create-brand-field input { @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100; }
+  .create-brand-hint { @apply text-xs; }
+  .create-brand-error { @apply rounded-lg bg-rose-50 p-3 text-rose-700; }
+  .create-brand-actions { @apply mt-6 flex justify-end gap-3; }
 }

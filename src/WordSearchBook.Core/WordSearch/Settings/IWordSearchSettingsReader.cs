@@ -22,6 +22,11 @@ public interface IWordSearchSettingsReader
 
 public interface IWordSearchSettingsWriter
 {
+    Task CreateBrandAsync(
+        string rootPath,
+        string brandId,
+        CancellationToken cancellationToken = default);
+
     Task SaveGlobalAsync(
         string rootPath,
         GlobalWordSearchSettings settings,

@@ -16,6 +16,7 @@
         </div>
         <nav class="nav-list" aria-label="Primary navigation">
           <button class="nav-item nav-item-active" type="button" data-route="books"><span class="nav-icon" aria-hidden="true">▦</span><span>Books</span></button>
+          <button class="nav-item" type="button" data-route="brands"><span class="nav-icon" aria-hidden="true">◫</span><span>Brands</span></button>
           <button class="nav-item" type="button" data-route="tasks"><span class="nav-icon" aria-hidden="true">◷</span><span>Tasks</span></button>
           <button class="nav-item" type="button" data-route="settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
         </nav>
@@ -33,5 +34,27 @@
         <main id="app-content" class="content" aria-live="polite"></main>
       </div>
     </div>
+    <dialog id="unsaved-brand-dialog" class="unsaved-dialog" aria-labelledby="unsaved-brand-title">
+      <h2 id="unsaved-brand-title">Unsaved brand changes</h2>
+      <p>Save your changes before leaving this brand?</p>
+      <div class="unsaved-dialog-actions">
+        <button class="button-secondary" type="button" data-action="dirty-cancel">Cancel</button>
+        <button class="button-secondary" type="button" data-action="dirty-discard">Discard</button>
+        <button class="button-primary" type="button" data-action="dirty-save">Save changes</button>
+      </div>
+    </dialog>
+    <dialog id="create-brand-dialog" class="create-brand-dialog" aria-labelledby="create-brand-title">
+      <form data-form="create-brand">
+        <h2 id="create-brand-title">Create brand</h2>
+        <p>Create a folder with a default brand settings file.</p>
+        <label class="create-brand-field"><span>Folder name</span><input name="brandId" type="text" maxlength="64" autocomplete="off" required placeholder="example-brand"></label>
+        <p class="create-brand-hint">Use a valid Windows folder name, up to 64 characters.</p>
+        <p class="create-brand-error hidden" data-create-brand-error role="alert"></p>
+        <div class="create-brand-actions">
+          <button class="button-secondary" type="button" data-action="cancel-create-brand">Cancel</button>
+          <button class="button-primary" type="submit" data-create-brand-submit>Create brand</button>
+        </div>
+      </form>
+    </dialog>
   </body>
 </html>

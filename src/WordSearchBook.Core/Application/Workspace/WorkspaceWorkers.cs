@@ -101,3 +101,29 @@ public sealed class SettingsSaveWorker(
         }
     }
 }
+
+public sealed class BrandCreateWorker(
+    IWordSearchSettingsWriter settingsWriter,
+    IWorkspaceSnapshotService snapshotService)
+    : BackgroundTaskWorker<BrandCreateTaskRequest, WorkspaceSnapshot>
+{
+    public override BackgroundTaskKind Kind => BackgroundTaskKind.BrandCreate;
+
+    protected override async ValueTask<WorkspaceSnapshot> ExecuteTypedAsync(
+        BrandCreateTaskRequest request,
+        IBackgroundTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            context.Report("Creating brand", subject: request.BrandId);
+            await settingsWriter.CreateBrandAsync(request.RootPath, request.BrandId, cancellationToken);
+            context.Report("Refreshing workspace", subject: request.BrandId);
+            return await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
+        }
+        catch (WordSearchGenerationException exception)
+        {
+            throw new BackgroundTaskFailureException(exception.Code, exception.Message);
+        }
+    }
+}

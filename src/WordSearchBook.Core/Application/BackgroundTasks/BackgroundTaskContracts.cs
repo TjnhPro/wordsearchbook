@@ -22,7 +22,8 @@ public enum BackgroundTaskKind
     WorkspaceRefresh,
     BookGeneration,
     SettingsSave,
-    BookBrandAssignmentSave
+    BookBrandAssignmentSave,
+    BrandCreate
 }
 
 public enum BackgroundTaskState
