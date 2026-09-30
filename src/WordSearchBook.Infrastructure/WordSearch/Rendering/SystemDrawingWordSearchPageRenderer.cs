@@ -155,6 +155,12 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
                 keywordSettings.Alignment,
                 font,
                 settings.Global.Page);
+            EnsureWithinKeywordSlot(
+                topic.Entries[index].Keyword,
+                bounds,
+                columnIndex,
+                keywordSettings,
+                settings.Global.Page);
             if (measured.Any(existing => existing.Bounds.IntersectsWith(bounds)))
             {
                 throw new WordSearchGenerationException(
@@ -168,6 +174,33 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         foreach (var item in measured)
         {
             graphics.DrawString(item.Value, font, brush, item.Bounds.X, item.Bounds.Y);
+        }
+    }
+
+    private static void EnsureWithinKeywordSlot(
+        string value,
+        RectangleF bounds,
+        int columnIndex,
+        KeywordListSettings settings,
+        PageSize pageSize)
+    {
+        var ordered = settings.Columns
+            .Select((column, index) => (column.X, Index: index))
+            .OrderBy(column => column.X)
+            .ToArray();
+        var orderedIndex = Array.FindIndex(ordered, column => column.Index == columnIndex);
+        var left = orderedIndex == 0
+            ? 0f
+            : (ordered[orderedIndex - 1].X + ordered[orderedIndex].X) / 2f;
+        var right = orderedIndex == ordered.Length - 1
+            ? pageSize.Width
+            : (ordered[orderedIndex].X + ordered[orderedIndex + 1].X) / 2f;
+
+        if (bounds.Left < left || bounds.Right > right || bounds.Height > settings.StepY)
+        {
+            throw new WordSearchGenerationException(
+                "page_text_overflow",
+                $"Keyword '{value}' crosses a neighboring keyword slot.");
         }
     }
 

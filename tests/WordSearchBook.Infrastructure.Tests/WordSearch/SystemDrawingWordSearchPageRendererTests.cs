@@ -115,6 +115,50 @@ public sealed class SystemDrawingWordSearchPageRendererTests
         }
     }
 
+    [Fact]
+    public void RejectsKeywordThatCrossesNeighboringColumnSlot()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    KeywordList = settings.Brand.KeywordList with
+                    {
+                        Columns =
+                        [
+                            new KeywordColumnAnchor(300, 1000),
+                            new KeywordColumnAnchor(350, 1000),
+                            new KeywordColumnAnchor(1300, 1000),
+                            new KeywordColumnAnchor(1800, 1000)
+                        ]
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    path,
+                    CreateTopic(),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("page_text_overflow", exception.Code);
+            Assert.Contains("neighboring", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static WordSearchSettingsBundle CreateSettings()
     {
         var brand = new BrandWordSearchSettings(
