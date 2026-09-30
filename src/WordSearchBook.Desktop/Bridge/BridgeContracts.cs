@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Desktop.Bridge;
@@ -43,4 +44,7 @@ internal sealed record BackgroundTaskBridgeSnapshot(
 internal sealed record BackgroundTaskDetail(
     BackgroundTaskBridgeSnapshot Task,
     WorkspaceSnapshot? Result,
-    BrandValidationResult? BrandValidationResult = null);
+    BrandValidationResult? BrandValidationResult = null,
+    BrandPagePreviewResult? BrandPagePreviewResult = null);
+
+internal sealed record BrandFolderOpened(string BrandId);

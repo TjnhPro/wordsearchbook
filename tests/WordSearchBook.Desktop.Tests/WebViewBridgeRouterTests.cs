@@ -3,6 +3,7 @@ using System.Text.Json;
 using WordSearchBook.Core.Application;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Desktop.Bridge;
 
@@ -132,6 +133,35 @@ public sealed class WebViewBridgeRouterTests
         Assert.Equal(Path.GetFullPath("application-root"), request.RootPath);
     }
 
+    [Fact]
+    public async Task EnqueuesTypedBrandPagePreview()
+    {
+        var router = CreateRouter(out var manager);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"brand-preview-1","type":"brand.preview.draw","payload":{"brandId":"demo"}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(BackgroundTaskKind.BrandPagePreview, manager.LastKind);
+        var request = Assert.IsType<BrandPagePreviewTaskRequest>(manager.LastRequest);
+        Assert.Equal("demo", request.BrandId);
+        Assert.Equal(Path.GetFullPath("application-root"), request.RootPath);
+    }
+
+    [Fact]
+    public async Task OpensBrandFolderUsingDesktopRoot()
+    {
+        var router = CreateRouter(out _, out var folderAction);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"brand-folder-1","type":"brand.folder.open","payload":{"brandId":"demo"}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("brand.folder.opened", response.RootElement.GetProperty("type").GetString());
+        Assert.Equal(Path.GetFullPath("application-root"), folderAction.RootPath);
+        Assert.Equal("demo", folderAction.BrandId);
+    }
+
     [Theory]
     [InlineData("../demo")]
     [InlineData("a/b")]
@@ -185,6 +215,32 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
+    public async Task TaskDetailIncludesCompletedBrandPagePreviewResult()
+    {
+        var router = CreateRouter(out var manager);
+        var preview = new BrandPagePreviewResult(
+            "demo",
+            BrandPagePreviewSample.OutputFileName,
+            2588,
+            3375,
+            DateTimeOffset.UtcNow);
+        var taskId = manager.AddCompleted(preview, BackgroundTaskKind.BrandPagePreview);
+        var message = JsonSerializer.Serialize(new
+        {
+            id = "task-preview-1",
+            type = "task.get",
+            payload = new { taskId = taskId.Value }
+        });
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(message));
+
+        var result = response.RootElement.GetProperty("data").GetProperty("brandPagePreviewResult");
+        Assert.Equal("demo", result.GetProperty("brandId").GetString());
+        Assert.Equal("page_layout.preview.png", result.GetProperty("fileName").GetString());
+        Assert.Equal(2588, result.GetProperty("width").GetInt32());
+    }
+
+    [Fact]
     public async Task EnqueuesTypedBrandSettingsSave()
     {
         var router = CreateRouter(out var manager);
@@ -230,11 +286,20 @@ public sealed class WebViewBridgeRouterTests
 
     private static WebViewBridgeRouter CreateRouter(out StubTaskManager manager)
     {
+        return CreateRouter(out manager, out _);
+    }
+
+    private static WebViewBridgeRouter CreateRouter(
+        out StubTaskManager manager,
+        out StubBrandFolderActionService folderAction)
+    {
         manager = new StubTaskManager();
+        folderAction = new StubBrandFolderActionService();
         return new WebViewBridgeRouter(
             new StubApplicationInfoProvider(),
             manager,
-            new StubRootProvider(Path.GetFullPath("application-root")));
+            new StubRootProvider(Path.GetFullPath("application-root")),
+            folderAction);
     }
 
     private sealed class StubApplicationInfoProvider : IApplicationInfoProvider
@@ -253,12 +318,14 @@ public sealed class WebViewBridgeRouterTests
 
         public object? LastRequest { get; private set; }
 
-        public BackgroundTaskId AddCompleted(object result)
+        public BackgroundTaskId AddCompleted(
+            object result,
+            BackgroundTaskKind kind = BackgroundTaskKind.BrandPageLayoutValidation)
         {
             var taskId = BackgroundTaskId.New();
             tasks.Add(taskId, new BackgroundTaskSnapshot(
                 taskId,
-                BackgroundTaskKind.BrandPageLayoutValidation,
+                kind,
                 BackgroundTaskState.Completed,
                 "brand-layout:demo",
                 "demo",
@@ -312,6 +379,23 @@ public sealed class WebViewBridgeRouterTests
 
             result = default;
             return false;
+        }
+    }
+
+    private sealed class StubBrandFolderActionService : IBrandFolderActionService
+    {
+        public string? RootPath { get; private set; }
+
+        public string? BrandId { get; private set; }
+
+        public ValueTask OpenAsync(
+            string rootPath,
+            string brandId,
+            CancellationToken cancellationToken = default)
+        {
+            RootPath = rootPath;
+            BrandId = brandId;
+            return ValueTask.CompletedTask;
         }
     }
 }
