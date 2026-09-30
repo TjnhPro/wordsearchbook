@@ -31,12 +31,28 @@ public sealed class SystemDrawingWordSearchTextArtifactRendererTests
         var topic = renderer.RenderTopic("Amazing Animals", Style(1200, 200, 24));
         var keywords = renderer.RenderKeywordList(
             Enumerable.Range(1, 20).Select(index => $"Word {index}").ToArray(),
-            Style(1000, 500, 12));
+            Style(2000, 500, 12));
         var pageNumber = renderer.RenderPageNumber(1, Style(200, 100, 14));
 
         AssertArtifact(topic, WordSearchArtifactKind.Topic, 1200, 200);
-        AssertArtifact(keywords, WordSearchArtifactKind.KeywordList, 1000, 500);
+        AssertArtifact(keywords, WordSearchArtifactKind.KeywordList, 2000, 500);
         AssertArtifact(pageNumber, WordSearchArtifactKind.PageNumber, 200, 100);
+    }
+
+    [Fact]
+    public void NormalizesTopicAndKeywordsToUppercaseBeforeRendering()
+    {
+        var renderer = new SystemDrawingWordSearchTextArtifactRenderer();
+        var mixedCaseTopic = renderer.RenderTopic("Amazing Animals", Style(1200, 200, 24));
+        var uppercaseTopic = renderer.RenderTopic("AMAZING ANIMALS", Style(1200, 200, 24));
+        var mixedCaseKeywords = Enumerable.Range(1, 20).Select(index => $"Word {index}").ToArray();
+        var uppercaseKeywords = mixedCaseKeywords.Select(keyword => keyword.ToUpperInvariant()).ToArray();
+
+        var mixedCaseList = renderer.RenderKeywordList(mixedCaseKeywords, Style(2000, 500, 12));
+        var uppercaseList = renderer.RenderKeywordList(uppercaseKeywords, Style(2000, 500, 12));
+
+        Assert.Equal(uppercaseTopic.Content, mixedCaseTopic.Content);
+        Assert.Equal(uppercaseList.Content, mixedCaseList.Content);
     }
 
     [Fact]

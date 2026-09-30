@@ -20,7 +20,7 @@ public sealed class SystemDrawingWordSearchTextArtifactRenderer : IWordSearchTex
             throw Invalid("Topic cannot be empty.");
         }
 
-        return RenderCenteredText(WordSearchArtifactKind.Topic, topic, style);
+        return RenderCenteredText(WordSearchArtifactKind.Topic, topic.Trim().ToUpperInvariant(), style);
     }
 
     public RenderedWordSearchArtifact RenderKeywordList(IReadOnlyList<string> keywords, TextRegionSettings style)
@@ -33,6 +33,10 @@ public sealed class SystemDrawingWordSearchTextArtifactRenderer : IWordSearchTex
             throw Invalid($"Keyword list must contain exactly {RequiredKeywordCount} non-empty values.");
         }
 
+        var normalizedKeywords = keywords
+            .Select(keyword => keyword.Trim().ToUpperInvariant())
+            .ToArray();
+
         try
         {
             using var font = SystemDrawingRenderSupport.CreateFont(style.Font);
@@ -44,11 +48,11 @@ public sealed class SystemDrawingWordSearchTextArtifactRenderer : IWordSearchTex
                 SystemDrawingRenderSupport.Configure(graphics);
                 graphics.Clear(Color.White);
 
-                for (var index = 0; index < keywords.Count; index++)
+                for (var index = 0; index < normalizedKeywords.Length; index++)
                 {
                     var cell = GetKeywordCell(index, bitmap.Width, bitmap.Height);
-                    EnsureFits(graphics, keywords[index], font, cell.Size, $"Keyword {index + 1}");
-                    graphics.DrawString(keywords[index], font, brush, cell, format);
+                    EnsureFits(graphics, normalizedKeywords[index], font, cell.Size, $"Keyword {index + 1}");
+                    graphics.DrawString(normalizedKeywords[index], font, brush, cell, format);
                 }
             }
 

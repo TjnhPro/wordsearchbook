@@ -32,6 +32,8 @@ public sealed class WordSearchBookGenerationServiceTests
             {
                 Assert.Equal(1, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
                 Assert.Equal("sample-book", manifest.RootElement.GetProperty("bookId").GetString());
+                Assert.Equal("AMAZING ANIMALS", manifest.RootElement.GetProperty("topics")[0].GetProperty("name").GetString());
+                Assert.Equal("RED PANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("keyword").GetString());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("entries").GetArrayLength());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("placements").GetArrayLength());
             }

@@ -48,8 +48,8 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var sourceRow = csv.Context.Parser?.Row ?? 0;
-                var topicName = RequireTrimmed(csv.GetField("Topic"), "Topic", sourceRow);
-                var keyword = RequireTrimmed(csv.GetField("Keyword"), "Keyword", sourceRow);
+                var topicName = RequireUppercase(csv.GetField("Topic"), "Topic", sourceRow);
+                var keyword = RequireUppercase(csv.GetField("Keyword"), "Keyword", sourceRow);
                 var wordSearchKey = NormalizeWordSearchKey(csv.GetField("Word Search Key"), sourceRow);
 
                 if (!topicsByName.TryGetValue(topicName, out var builder))
@@ -126,7 +126,7 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
         }
     }
 
-    private static string RequireTrimmed(string? value, string fieldName, int sourceRow)
+    private static string RequireUppercase(string? value, string fieldName, int sourceRow)
     {
         var trimmed = value?.Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
@@ -136,7 +136,7 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
                 $"CSV row {sourceRow}: {fieldName} cannot be empty.");
         }
 
-        return trimmed;
+        return trimmed.ToUpperInvariant();
     }
 
     private static string NormalizeWordSearchKey(string? value, int sourceRow)

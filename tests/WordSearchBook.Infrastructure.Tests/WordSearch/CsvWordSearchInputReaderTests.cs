@@ -21,9 +21,9 @@ public sealed class CsvWordSearchInputReaderTests
 
         var topic = Assert.Single(topics);
         Assert.Equal(1, topic.Index);
-        Assert.Equal("Amazing Animals", topic.Name);
+        Assert.Equal("AMAZING ANIMALS", topic.Name);
         Assert.Equal(20, topic.Entries.Count);
-        Assert.Equal("Red Panda", topic.Entries[0].Keyword);
+        Assert.Equal("RED PANDA", topic.Entries[0].Keyword);
         Assert.Equal("REDPANDA", topic.Entries[0].WordSearchKey);
         Assert.Equal("CORALSNAKE", topic.Entries[^1].WordSearchKey);
     }
@@ -39,8 +39,30 @@ public sealed class CsvWordSearchInputReaderTests
         {
             var topic = Assert.Single(await new CsvWordSearchInputReader().ReadAsync(path));
 
-            Assert.Equal("Panda, Red", topic.Entries[0].Keyword);
+            Assert.Equal("PANDA, RED", topic.Entries[0].Keyword);
             Assert.Equal("REDPANDA", topic.Entries[0].WordSearchKey);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task GroupsTopicsAfterUppercaseNormalization()
+    {
+        var rows = CreateValidRows();
+        rows[0] = "  animals  ,  Red Panda  ,RED PANDA";
+        rows[1] = "ANIMALS,Blue Whale,BLUE WHALE";
+        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+
+        try
+        {
+            var topic = Assert.Single(await new CsvWordSearchInputReader().ReadAsync(path));
+
+            Assert.Equal("ANIMALS", topic.Name);
+            Assert.Equal("RED PANDA", topic.Entries[0].Keyword);
+            Assert.Equal("BLUE WHALE", topic.Entries[1].Keyword);
         }
         finally
         {
