@@ -1,0 +1,153 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Settings;
+
+namespace WordSearchBook.Infrastructure.WordSearch.Settings;
+
+public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsReader
+{
+    private const int SupportedBoardWidth = 20;
+    private const int SupportedBoardHeight = 20;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+    };
+
+    public async Task<WordSearchSettingsBundle> ReadAsync(
+        string rootPath,
+        string brandId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ValidatePathSegment(brandId, nameof(brandId));
+
+        var globalPath = Path.Combine(rootPath, "settings.json");
+        var brandPath = Path.Combine(rootPath, "brands", brandId, "settings.json");
+
+        var global = await ReadJsonAsync<GlobalWordSearchSettings>(globalPath, cancellationToken);
+        var brand = await ReadJsonAsync<BrandWordSearchSettings>(brandPath, cancellationToken);
+        Validate(global, brand);
+        return new WordSearchSettingsBundle(global, brand);
+    }
+
+    private static async Task<T> ReadJsonAsync<T>(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            throw new WordSearchGenerationException("settings_not_found", $"Settings file was not found: {path}");
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken)
+                ?? throw new WordSearchGenerationException("settings_invalid", $"Settings file is empty: {path}");
+        }
+        catch (WordSearchGenerationException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JsonException exception)
+        {
+            throw new WordSearchGenerationException("settings_invalid", $"Settings JSON is invalid at '{path}': {exception.Message}", exception);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new WordSearchGenerationException("settings_read_failed", $"Settings file could not be read: {path}", exception);
+        }
+    }
+
+    private static void Validate(GlobalWordSearchSettings global, BrandWordSearchSettings brand)
+    {
+        if (global.Board is null || global.Page is null)
+        {
+            throw Invalid("Global settings require board and page objects.");
+        }
+
+        if (global.Board.Width != SupportedBoardWidth || global.Board.Height != SupportedBoardHeight)
+        {
+            throw new WordSearchGenerationException(
+                "board_size_unsupported",
+                $"MVP board size must be {SupportedBoardWidth}x{SupportedBoardHeight}.");
+        }
+
+        if (global.Page.Width <= 0 || global.Page.Height <= 0)
+        {
+            throw Invalid("Page width and height must be positive.");
+        }
+
+        ValidateRegion("topic", brand.Topic, global.Page);
+        ValidateRegion("boardGame", brand.BoardGame, global.Page);
+        ValidateRegion("keywordList", brand.KeywordList, global.Page);
+        ValidateRegion("pageNumber", brand.PageNumber, global.Page);
+
+        var boardRectangle = brand.BoardGame.Rectangle;
+        if (boardRectangle.Width != boardRectangle.Height || boardRectangle.Width % SupportedBoardWidth != 0)
+        {
+            throw Invalid($"boardGame.rectangle must be square and divisible by {SupportedBoardWidth}.");
+        }
+
+        if (brand.AnswerLine is null || brand.AnswerLine.Width <= 0)
+        {
+            throw Invalid("answerLine.width must be positive.");
+        }
+
+        ValidateColor("answerLine.color", brand.AnswerLine.Color);
+    }
+
+    private static void ValidateRegion(string name, TextRegionSettings? region, PageSize page)
+    {
+        if (region?.Rectangle is null || region.Font is null)
+        {
+            throw Invalid($"{name} requires rectangle and font objects.");
+        }
+
+        var rectangle = region.Rectangle;
+        if (rectangle.X < 0 || rectangle.Y < 0 || rectangle.Width <= 0 || rectangle.Height <= 0)
+        {
+            throw Invalid($"{name}.rectangle must have non-negative coordinates and positive dimensions.");
+        }
+
+        if ((long)rectangle.X + rectangle.Width > page.Width || (long)rectangle.Y + rectangle.Height > page.Height)
+        {
+            throw Invalid($"{name}.rectangle must stay inside the configured page.");
+        }
+
+        if (string.IsNullOrWhiteSpace(region.Font.Name) || region.Font.Size <= 0)
+        {
+            throw Invalid($"{name}.font requires a name and positive size.");
+        }
+
+        ValidateColor($"{name}.font.color", region.Font.Color);
+    }
+
+    private static void ValidateColor(string fieldName, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !HexColorPattern().IsMatch(value))
+        {
+            throw Invalid($"{fieldName} must use #RRGGBB or #AARRGGBB format.");
+        }
+    }
+
+    private static void ValidatePathSegment(string value, string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        if (value is "." or ".." || value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || value.Contains('/') || value.Contains('\\'))
+        {
+            throw new ArgumentException("Value must be a single safe path segment.", parameterName);
+        }
+    }
+
+    private static WordSearchGenerationException Invalid(string message) => new("settings_invalid", message);
+
+    [GeneratedRegex("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")]
+    private static partial Regex HexColorPattern();
+}
