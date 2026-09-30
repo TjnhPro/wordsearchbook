@@ -131,8 +131,16 @@
   .page-layout-facts div { @apply min-w-0 rounded-lg bg-white px-3 py-2; }
   .page-layout-facts dt { @apply text-[11px] font-semibold uppercase tracking-wide text-slate-400; }
   .page-layout-facts dd { @apply mt-1 truncate text-xs font-bold text-slate-700; }
-  .page-layout-actions { @apply mt-4 flex items-center gap-3; }
+  .page-layout-actions { @apply mt-4 flex flex-wrap items-center gap-3; }
   .page-layout-actions span { @apply text-xs font-semibold text-amber-700; }
+  .page-preview-panel { @apply mt-4 grid grid-cols-[1fr_auto] items-center gap-4 rounded-xl border border-slate-200 bg-white p-4; }
+  .page-preview-panel strong { @apply block text-sm font-bold text-slate-800; }
+  .page-preview-panel p { @apply mt-1 text-xs text-slate-500; }
+  .page-preview-panel code { @apply mt-2 inline-block rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600; }
+  .page-preview-actions { @apply flex flex-wrap justify-end gap-2; }
+  .page-preview-feedback { @apply col-span-2 rounded-lg px-3 py-2 text-xs font-semibold; }
+  .page-preview-feedback[data-state="success"] { @apply bg-emerald-50 text-emerald-700; }
+  .page-preview-feedback[data-state="error"] { @apply bg-rose-50 text-rose-700; }
   .layout-validation-reason { @apply mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800; }
   .layout-validation-failures { @apply mt-3 list-disc space-y-1 rounded-lg bg-rose-50 px-7 py-3 text-xs text-rose-700; }
   .fixed-page-card { @apply mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3; }

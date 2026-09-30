@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, brandNavigationDisposition, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -240,4 +240,11 @@ test("allows generation only for a certified brand", () => {
   assert.equal(canGenerateWithBrand({ layoutValidation: { status: "NeedsValidation" } }), false);
   assert.equal(canGenerateWithBrand({ layoutValidation: { status: "NotValidated" } }), false);
   assert.equal(canGenerateWithBrand(null), false);
+});
+
+test("disables preview drawing for unsaved, saving, or active brand state", () => {
+  assert.equal(brandPreviewActionDisabled(false, false, false), false);
+  assert.equal(brandPreviewActionDisabled(true, false, false), true);
+  assert.equal(brandPreviewActionDisabled(false, true, false), true);
+  assert.equal(brandPreviewActionDisabled(false, false, true), true);
 });

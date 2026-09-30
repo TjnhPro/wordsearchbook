@@ -67,6 +67,8 @@ Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy applicati
 
 Mỗi brand lưu certificate tại `brands/{brand}/brand.validation.json`. Workspace startup chỉ so certificate với metadata `page_layout.png`; việc decode PNG và kiểm tra đúng `2588x3375` chỉ chạy qua nút **Validate layout** trong background queue. Generation bị chặn ở cả UI và Core cho đến khi trạng thái layout là `Validated`.
 
+Brand Detail cung cấp **Draw demo** để render một trang mẫu cố định bằng settings đã lưu vào `brands/{brand}/page_layout.preview.png`. Preview chạy trong background queue, không sửa `page_layout.png` hay certificate validation; **Open folder** mở trực tiếp thư mục brand để xem file kết quả ở kích thước đầy đủ.
+
 Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Migration chỉ diễn ra trong memory; lần Save Brand tiếp theo ghi schema canonical gồm text anchor/alignment và bốn keyword column anchors.
 
 Quy ước kích thước và bố cục Desktop được ghi tại [Desktop UI guidelines](docs/ui-guidelines.md). UI dùng baseline `1600x900`; `MainWindow` có kích thước khởi tạo và tối thiểu `1610x910` để chừa khoảng trống quanh nội dung.

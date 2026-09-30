@@ -19,6 +19,9 @@
 - Creating a valid default PNG does not certify it. Show `Not validated`, `Validated`, or `Needs validation` separately from settings health.
 - Deep PNG validation runs only when the user selects **Validate layout**. Workspace load and refresh may read `brand.validation.json` and file metadata but must not decode the PNG.
 - Keep the Page Layout card visible even when Brand or global settings are invalid. Disable validation while the current Brand form is dirty or saving.
+- Keep a **Page layout preview** panel inside the Page Layout card. **Draw demo** uses only saved settings and writes `page_layout.preview.png` beside the source layout through the background queue.
+- Disable **Draw demo** while the selected Brand has unsaved edits, is saving, or already has an active preview task. **Open folder** remains available and must use the desktop-derived Brand path rather than a path supplied by the frontend.
+- Preview generation is independent from the validation certificate and must never modify `page_layout.png` or `brand.validation.json`.
 - Books may list any Brand with readable settings, but **Generate pages** stays disabled until that Brand's layout state is `Validated`.
 - Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
 - Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.

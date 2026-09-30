@@ -9,7 +9,8 @@ const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
 const state = {
   route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null,
   brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false,
-  brandSaving: false, brandValidationFeedback: null, pendingNavigation: null, client: null, pollTimers: new Map()
+  brandSaving: false, brandValidationFeedback: null, brandPreviewFeedback: null,
+  pendingNavigation: null, client: null, pollTimers: new Map()
 };
 
 function escapeHtml(value) {
@@ -28,6 +29,12 @@ function brandValidationPresentation(validation) {
 function canGenerateWithBrand(brand) { return brand?.layoutValidation?.status === "Validated"; }
 function isBrandValidationActive(brandId) {
   return state.tasks.some(task => task.kind === "BrandPageLayoutValidation" && task.subject === brandId && activeTaskStates.has(task.state));
+}
+function isBrandPreviewActive(brandId) {
+  return state.tasks.some(task => task.kind === "BrandPagePreview" && task.subject === brandId && activeTaskStates.has(task.state));
+}
+function brandPreviewActionDisabled(brandDirty, brandSaving, previewActive) {
+  return brandDirty || brandSaving || previewActive;
 }
 function shortFingerprint(value) {
   const fingerprint = String(value ?? "");
@@ -66,6 +73,7 @@ function applyNavigation(destination, render) {
   if (destination.kind === "brand") {
     state.selectedBrandId = destination.value;
     state.brandValidationFeedback = null;
+    state.brandPreviewFeedback = null;
     render("brands");
     return;
   }
@@ -155,6 +163,7 @@ function brandLayoutCard(brand) {
   const validation = brand.layoutValidation ?? { status: "NotValidated" };
   const presentation = brandValidationPresentation(validation);
   const active = isBrandValidationActive(brand.id);
+  const previewActive = isBrandPreviewActive(brand.id);
   const guarded = state.brandDirty || state.brandSaving;
   const feedback = state.brandValidationFeedback?.brandId === brand.id ? state.brandValidationFeedback.failures ?? [] : [];
   const failures = feedback.length
@@ -164,8 +173,10 @@ function brandLayoutCard(brand) {
     ? `<p class="layout-validation-reason">${escapeHtml(validation.reasonCode)}</p>`
     : "";
   const validatedAt = validation.validatedAtUtc ? new Date(validation.validatedAtUtc).toLocaleString() : "Never";
-  const guardMessage = guarded ? "Save or discard settings changes before validating." : "";
-  return `<section class="page-layout-card"><div class="page-layout-card-heading"><div><p class="eyebrow">Page layout</p><h4>page_layout.png</h4></div>${badge(presentation.label, presentation.tone)}</div><dl class="page-layout-facts"><div><dt>Required size</dt><dd>2588 × 3375 px</dd></div><div><dt>Last validated</dt><dd>${escapeHtml(validatedAt)}</dd></div><div><dt>Fingerprint</dt><dd title="${escapeHtml(validation.fingerprint ?? "")}">${escapeHtml(shortFingerprint(validation.fingerprint))}</dd></div></dl>${reason}${failures}<div class="page-layout-actions"><button class="button-secondary" type="button" data-action="validate-brand-layout" data-brand-id="${escapeHtml(brand.id)}" data-brand-validation-button ${active || guarded ? "disabled" : ""}>${active ? "Validating…" : "Validate layout"}</button><span data-brand-validation-guard>${escapeHtml(guardMessage)}</span></div></section>`;
+  const guardMessage = guarded ? "Save or discard settings changes before validating or drawing a demo." : "";
+  const previewFeedback = state.brandPreviewFeedback?.brandId === brand.id ? state.brandPreviewFeedback : null;
+  const previewFeedbackMarkup = `<p class="page-preview-feedback ${previewFeedback ? "" : "hidden"}" data-brand-preview-feedback data-state="${escapeHtml(previewFeedback?.tone ?? "neutral")}" role="status">${escapeHtml(previewFeedback?.message ?? "")}</p>`;
+  return `<section class="page-layout-card"><div class="page-layout-card-heading"><div><p class="eyebrow">Page layout</p><h4>page_layout.png</h4></div>${badge(presentation.label, presentation.tone)}</div><dl class="page-layout-facts"><div><dt>Required size</dt><dd>2588 × 3375 px</dd></div><div><dt>Last validated</dt><dd>${escapeHtml(validatedAt)}</dd></div><div><dt>Fingerprint</dt><dd title="${escapeHtml(validation.fingerprint ?? "")}">${escapeHtml(shortFingerprint(validation.fingerprint))}</dd></div></dl>${reason}${failures}<div class="page-layout-actions"><button class="button-secondary" type="button" data-action="validate-brand-layout" data-brand-id="${escapeHtml(brand.id)}" data-brand-validation-button ${active || guarded ? "disabled" : ""}>${active ? "Validating…" : "Validate layout"}</button><span data-brand-validation-guard>${escapeHtml(guardMessage)}</span></div><div class="page-preview-panel"><div><strong>Page layout preview</strong><p>Draws a fixed 20-word sample with the saved brand settings.</p><code>page_layout.preview.png</code></div><div class="page-preview-actions"><button class="button-primary" type="button" data-action="draw-brand-preview" data-brand-id="${escapeHtml(brand.id)}" data-brand-preview-button ${brandPreviewActionDisabled(state.brandDirty, state.brandSaving, previewActive) ? "disabled" : ""}>${previewActive ? "Drawing…" : "Draw demo"}</button><button class="button-secondary" type="button" data-action="open-brand-folder" data-brand-id="${escapeHtml(brand.id)}">Open folder</button></div>${previewFeedbackMarkup}</div></section>`;
 }
 
 function renderBrands() {
@@ -321,14 +332,20 @@ function refreshBrandFormState(documentRoot) {
   const validationButton = documentRoot.querySelector("[data-brand-validation-button]");
   const validationGuard = documentRoot.querySelector("[data-brand-validation-guard]");
   const validationActive = isBrandValidationActive(state.selectedBrandId);
+  const previewActive = isBrandPreviewActive(state.selectedBrandId);
   if (validationButton) {
     validationButton.disabled = validationActive || state.brandDirty || state.brandSaving;
     validationButton.textContent = validationActive ? "Validating…" : "Validate layout";
   }
   if (validationGuard) {
     validationGuard.textContent = state.brandDirty || state.brandSaving
-      ? "Save or discard settings changes before validating."
+      ? "Save or discard settings changes before validating or drawing a demo."
       : "";
+  }
+  const previewButton = documentRoot.querySelector("[data-brand-preview-button]");
+  if (previewButton) {
+    previewButton.disabled = brandPreviewActionDisabled(state.brandDirty, state.brandSaving, previewActive);
+    previewButton.textContent = previewActive ? "Drawing…" : "Draw demo";
   }
   const form = documentRoot.querySelector('[data-form="brand-settings"]');
   if (!form) return;
@@ -354,6 +371,14 @@ function showBrandSaveMessage(documentRoot, message) {
   if (!element) return;
   element.textContent = message ?? "";
   element.classList.toggle("hidden", !message);
+}
+
+function showBrandPreviewFeedback(documentRoot, feedback) {
+  const element = documentRoot.querySelector("[data-brand-preview-feedback]");
+  if (!element) return;
+  element.textContent = feedback?.message ?? "";
+  element.dataset.state = feedback?.tone ?? "neutral";
+  element.classList.toggle("hidden", !feedback);
 }
 
 function initializeWorkspace(documentRoot, render) {
@@ -484,6 +509,7 @@ function initializeWorkspace(documentRoot, render) {
         state.selectedBrandId = brandId;
         state.brandSearchQuery = "";
         state.brandValidationFeedback = null;
+        state.brandPreviewFeedback = null;
         state.brandBaselineId = null;
         state.brandBaseline = null;
         state.brandDirty = false;
@@ -559,6 +585,46 @@ function initializeWorkspace(documentRoot, render) {
         }
       });
     }
+    if (target.dataset.action === "draw-brand-preview" &&
+        !brandPreviewActionDisabled(state.brandDirty, state.brandSaving, isBrandPreviewActive(target.dataset.brandId))) {
+      const brandId = target.dataset.brandId;
+      state.brandPreviewFeedback = null;
+      start("brand.preview.draw", { brandId }, {
+        onStarted: () => renderCurrentRoute(),
+        onRejected: error => {
+          state.brandPreviewFeedback = {
+            brandId,
+            tone: "error",
+            message: error?.message ?? "Page layout preview could not be started."
+          };
+          renderCurrentRoute();
+        },
+        onTerminal: (task, detail) => {
+          const fileName = detail?.brandPagePreviewResult?.fileName ?? "page_layout.preview.png";
+          state.brandPreviewFeedback = {
+            brandId,
+            tone: task.state === "Completed" ? "success" : "error",
+            message: task.state === "Completed"
+              ? `Demo written to ${fileName}.`
+              : task.errorMessage || `Page layout preview was ${String(task.state).toLocaleLowerCase()}.`
+          };
+          renderCurrentRoute();
+        }
+      });
+    }
+    if (target.dataset.action === "open-brand-folder") {
+      const brandId = target.dataset.brandId;
+      state.brandPreviewFeedback = null;
+      showBrandPreviewFeedback(documentRoot, null);
+      state.client.send("brand.folder.open", { brandId }, response => {
+        state.brandPreviewFeedback = {
+          brandId,
+          tone: response.ok ? "success" : "error",
+          message: response.ok ? "Brand folder opened." : response.error?.message ?? "Brand folder could not be opened."
+        };
+        showBrandPreviewFeedback(documentRoot, state.brandPreviewFeedback);
+      });
+    }
     if (target.dataset.action === "cancel-task") start("task.cancel", { taskId: target.dataset.taskId });
   });
   documentRoot.addEventListener("input", event => {
@@ -570,7 +636,9 @@ function initializeWorkspace(documentRoot, render) {
     const form = target.closest?.('[data-form="brand-settings"]');
     if (!form || state.brandSaving) return;
     state.brandDirty = hasBrandSettingsChanged(brandSettingsValue(new FormData(form)), state.brandBaseline);
+    state.brandPreviewFeedback = null;
     showBrandSaveMessage(documentRoot, null);
+    showBrandPreviewFeedback(documentRoot, null);
     refreshBrandFormState(documentRoot);
   });
   documentRoot.addEventListener("change", event => {
@@ -612,6 +680,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, brandNavigationDisposition, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
+const api = { activateRoute, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;
