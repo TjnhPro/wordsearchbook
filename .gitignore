@@ -1,0 +1,33 @@
+# Build and test output
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Tt]est[Rr]esult*/
+artifacts/
+
+# Visual Studio and local user settings
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Frontend dependencies and generated maps
+node_modules/
+*.css.map
+
+# WebView2 local profiles
+WebView2/
+WebView2Data/
+
+# Local planning and agent workspaces
+.plan/
+.agents/
+.orca/
+.playwright-cli/
+.test-artifacts/
+
+# OS files
+.DS_Store
+Thumbs.db

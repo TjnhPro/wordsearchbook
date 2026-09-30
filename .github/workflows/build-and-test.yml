@@ -1,0 +1,49 @@
+name: Build and test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: src/WordSearchBook.Desktop/Frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: src/WordSearchBook.Desktop/Frontend
+
+      - name: Verify frontend
+        run: |
+          npm run verify:css
+          npm test
+        working-directory: src/WordSearchBook.Desktop/Frontend
+
+      - name: Restore
+        run: dotnet restore WordSearchBook.sln
+
+      - name: Build
+        run: dotnet build WordSearchBook.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test WordSearchBook.sln --configuration Release --no-build
