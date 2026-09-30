@@ -1,6 +1,8 @@
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.WordSearch.Input;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
+using WordSearchBook.Infrastructure.WordSearch.Validation;
 using WordSearchBook.Infrastructure.Workspace;
 
 namespace WordSearchBook.Infrastructure.Tests.Workspace;
@@ -14,6 +16,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
         var service = new WordSearchWorkspaceSnapshotService(
             new CsvWordSearchInputReader(),
             new JsonWordSearchSettingsReader(),
+            CreateValidationService(),
             new StubAssignmentStore(new Dictionary<string, string> { ["sample-book"] = "demo" }));
 
         var snapshot = await service.RefreshAsync(root);
@@ -22,6 +25,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
         var brand = Assert.Single(snapshot.Brands);
         Assert.Equal("demo", brand.Id);
         Assert.Null(brand.Issue);
+        Assert.Equal(BrandValidationStatus.NotValidated, brand.LayoutValidation.Status);
         var book = Assert.Single(snapshot.Books);
         Assert.Equal("sample-book", book.Id);
         Assert.Equal(1, book.TopicCount);
@@ -41,6 +45,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
             var service = new WordSearchWorkspaceSnapshotService(
                 new CsvWordSearchInputReader(),
                 new JsonWordSearchSettingsReader(),
+                CreateValidationService(),
                 new StubAssignmentStore(new Dictionary<string, string>()));
 
             var snapshot = await service.RefreshAsync(root);
@@ -66,6 +71,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
             var service = new WordSearchWorkspaceSnapshotService(
                 new CsvWordSearchInputReader(),
                 new JsonWordSearchSettingsReader(),
+                CreateValidationService(),
                 new StubAssignmentStore(new Dictionary<string, string>()));
 
             var snapshot = await service.RefreshAsync(root);
@@ -75,6 +81,32 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
             Assert.Equal(20, snapshot.GlobalSettings.Board.Width);
             Assert.Equal(2588, snapshot.GlobalSettings.Page.Width);
             Assert.True(File.Exists(Path.Combine(root, "settings.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task KeepsLayoutValidationVisibleWhenGlobalSettingsAreInvalid()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "settings.json"), "{}");
+            var service = new WordSearchWorkspaceSnapshotService(
+                new CsvWordSearchInputReader(),
+                new JsonWordSearchSettingsReader(),
+                CreateValidationService(),
+                new StubAssignmentStore(new Dictionary<string, string>()));
+
+            var snapshot = await service.RefreshAsync(root);
+
+            Assert.NotNull(snapshot.GlobalSettingsIssue);
+            var brand = Assert.Single(snapshot.Brands);
+            Assert.Equal(BrandValidationStatus.NotValidated, brand.LayoutValidation.Status);
+            Assert.NotNull(brand.Issue);
         }
         finally
         {
@@ -125,6 +157,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
 
         return destination;
     }
+
+    private static BrandValidationService CreateValidationService() => new(new JsonBrandValidationStateStore());
 
     private sealed class StubAssignmentStore(IReadOnlyDictionary<string, string> assignments) : IBookBrandAssignmentStore
     {

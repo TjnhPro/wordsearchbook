@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.DependencyInjection;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
@@ -17,6 +18,7 @@ public sealed class WordSearchBookGenerationServiceTests
         try
         {
             using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
             var service = services.GetRequiredService<IWordSearchBookGenerationService>();
             var request = new WordSearchGenerationRequest(root, "sample-book", "demo");
 
@@ -71,6 +73,7 @@ public sealed class WordSearchBookGenerationServiceTests
         try
         {
             using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
             var service = services.GetRequiredService<IWordSearchBookGenerationService>();
             var request = new WordSearchGenerationRequest(root, "sample-book", "demo");
             var successful = await service.GenerateAsync(request);
@@ -112,6 +115,7 @@ public sealed class WordSearchBookGenerationServiceTests
             await File.WriteAllLinesAsync(dataPath, [lines[0], .. lines.Skip(1), .. secondTopicRows]);
 
             using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
             var result = await services.GetRequiredService<IWordSearchBookGenerationService>()
                 .GenerateAsync(new WordSearchGenerationRequest(root, "sample-book", "demo"));
 
@@ -149,11 +153,68 @@ public sealed class WordSearchBookGenerationServiceTests
         }
     }
 
+    [Fact]
+    public async Task RejectsGenerationBeforeReadingInputWhenLayoutIsNotCertified()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            File.Delete(Path.Combine(root, "input", "sample-book", "data.csv"));
+            using var services = BuildServices();
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
+                    new WordSearchGenerationRequest(root, "sample-book", "demo")));
+
+            Assert.Equal("brand_layout_not_validated", exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RejectsGenerationWhenCertifiedLayoutMetadataChanges()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
+            await using (var stream = new FileStream(
+                Path.Combine(root, "brands", "demo", "page_layout.png"),
+                FileMode.Append,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                await stream.WriteAsync(new byte[] { 0 });
+            }
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
+                    new WordSearchGenerationRequest(root, "sample-book", "demo")));
+
+            Assert.Equal("brand_layout_not_validated", exception.Code);
+            Assert.Contains("brand_fingerprint_changed", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ServiceProvider BuildServices()
     {
         var services = new ServiceCollection();
         services.AddWordSearchBookInfrastructure();
         return services.BuildServiceProvider();
+    }
+
+    private static async Task CertifyLayoutAsync(IServiceProvider services, string root)
+    {
+        var result = await services.GetRequiredService<IBrandValidationService>().ValidateAsync(root, "demo");
+        Assert.True(result.IsSuccess);
     }
 
     private static string CopyFixtureToTemporaryRoot()

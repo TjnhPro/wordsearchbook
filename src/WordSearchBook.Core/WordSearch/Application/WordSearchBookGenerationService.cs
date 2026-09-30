@@ -4,6 +4,7 @@ using WordSearchBook.Core.WordSearch.Generation;
 using WordSearchBook.Core.WordSearch.Input;
 using WordSearchBook.Core.WordSearch.Rendering;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Core.WordSearch.Application;
 
@@ -13,7 +14,8 @@ public sealed class WordSearchBookGenerationService(
     IWordSearchPuzzleGenerator puzzleGenerator,
     IWordSearchBoardRenderer boardRenderer,
     IWordSearchPageRenderer pageRenderer,
-    IWordSearchCachePublisher cachePublisher) : IWordSearchBookGenerationService
+    IWordSearchCachePublisher cachePublisher,
+    IBrandValidationService validationService) : IWordSearchBookGenerationService
 {
     public async Task<WordSearchGenerationResult> GenerateAsync(
         WordSearchGenerationRequest request,
@@ -30,6 +32,15 @@ public sealed class WordSearchBookGenerationService(
 
         ValidatePathSegment(request.BookId, nameof(request.BookId));
         ValidatePathSegment(request.BrandId, nameof(request.BrandId));
+
+        var layoutValidation = await validationService.CheckStateAsync(rootPath, request.BrandId, cancellationToken);
+        if (layoutValidation.Status != BrandValidationStatus.Validated)
+        {
+            var reason = layoutValidation.ReasonCode is null ? string.Empty : $" Reason: {layoutValidation.ReasonCode}.";
+            throw new WordSearchGenerationException(
+                "brand_layout_not_validated",
+                $"Brand '{request.BrandId}' page layout must be validated before generation.{reason}");
+        }
 
         var normalizedRequest = request with { RootPath = rootPath };
         var settings = await settingsReader.ReadAsync(rootPath, request.BrandId, cancellationToken);

@@ -1,4 +1,5 @@
 using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Core.Application.Workspace;
 
@@ -7,6 +8,7 @@ public sealed record WorkspaceIssue(string Code, string Message);
 public sealed record WorkspaceBrand(
     string Id,
     BrandWordSearchSettings? Settings,
+    BrandValidationState LayoutValidation,
     WorkspaceIssue? Issue);
 
 public sealed record WorkspaceBook(
