@@ -7,20 +7,29 @@ namespace WordSearchBook.Desktop.Shutdown;
 
 public partial class CloseApplicationDialog : Window
 {
+    private static readonly TimeSpan MinimumClosingStateDuration = TimeSpan.FromMilliseconds(500);
     private readonly Func<Task> closeAsync;
     private bool closing;
     private bool closeCompleted;
 
     internal CloseApplicationDialog(int activeTaskCount, Func<Task> closeAsync)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(activeTaskCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(activeTaskCount);
         ArgumentNullException.ThrowIfNull(closeAsync);
 
         this.closeAsync = closeAsync;
         InitializeComponent();
-        ConfirmationMessage.Text = activeTaskCount == 1
-            ? "1 background task is still running. Closing will cancel it before Word Search Book exits."
-            : $"{activeTaskCount} background tasks are still running. Closing will cancel them before Word Search Book exits.";
+        if (activeTaskCount == 0)
+        {
+            DialogTitle.Text = "Close Word Search Book?";
+            ConfirmationMessage.Text = "The application is ready to close.";
+        }
+        else
+        {
+            ConfirmationMessage.Text = activeTaskCount == 1
+                ? "1 background task is still running. Closing will cancel it before Word Search Book exits."
+                : $"{activeTaskCount} background tasks are still running. Closing will cancel them before Word Search Book exits.";
+        }
     }
 
     internal bool IsClosing => closing;
@@ -47,7 +56,7 @@ public partial class CloseApplicationDialog : Window
 
         try
         {
-            await closeAsync();
+            await Task.WhenAll(closeAsync(), Task.Delay(MinimumClosingStateDuration));
         }
         catch (Exception exception)
         {

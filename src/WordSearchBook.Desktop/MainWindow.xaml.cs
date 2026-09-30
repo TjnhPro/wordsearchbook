@@ -95,18 +95,15 @@ public partial class MainWindow : Window
         try
         {
             var active = await closeCoordinator.GetActiveTasksAsync();
-            if (active.Count > 0)
+            var dialog = new CloseApplicationDialog(
+                active.Count,
+                () => closeCoordinator.CancelAndWaitAsync(active, TimeSpan.FromSeconds(5)))
             {
-                var dialog = new CloseApplicationDialog(
-                    active.Count,
-                    () => closeCoordinator.CancelAndWaitAsync(active, TimeSpan.FromSeconds(5)))
-                {
-                    Owner = this
-                };
-                if (dialog.ShowDialog() != true)
-                {
-                    return;
-                }
+                Owner = this
+            };
+            if (dialog.ShowDialog() != true)
+            {
+                return;
             }
 
             allowClose = true;
