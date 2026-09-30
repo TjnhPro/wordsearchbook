@@ -129,25 +129,25 @@ public sealed class BrandCreateWorker(
     }
 }
 
-public sealed class BrandPageLayoutValidationWorker(
+public sealed class BrandValidationWorker(
     IBrandValidationService validationService,
     IWorkspaceSnapshotService snapshotService)
-    : BackgroundTaskWorker<BrandPageLayoutValidationRequest, BrandPageLayoutValidationTaskResult>
+    : BackgroundTaskWorker<BrandValidationRequest, BrandValidationTaskResult>
 {
-    public override BackgroundTaskKind Kind => BackgroundTaskKind.BrandPageLayoutValidation;
+    public override BackgroundTaskKind Kind => BackgroundTaskKind.BrandValidation;
 
-    protected override async ValueTask<BrandPageLayoutValidationTaskResult> ExecuteTypedAsync(
-        BrandPageLayoutValidationRequest request,
+    protected override async ValueTask<BrandValidationTaskResult> ExecuteTypedAsync(
+        BrandValidationRequest request,
         IBackgroundTaskContext context,
         CancellationToken cancellationToken)
     {
         try
         {
-            context.Report("Validating page layout", subject: request.BrandId);
+            context.Report("Validating brand assets", subject: request.BrandId);
             var validation = await validationService.ValidateAsync(request.RootPath, request.BrandId, cancellationToken);
             context.Report("Refreshing workspace", subject: request.BrandId);
             var snapshot = await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
-            return new BrandPageLayoutValidationTaskResult(snapshot, validation);
+            return new BrandValidationTaskResult(snapshot, validation);
         }
         catch (WordSearchGenerationException exception)
         {

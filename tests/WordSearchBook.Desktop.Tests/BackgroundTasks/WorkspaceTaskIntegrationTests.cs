@@ -55,13 +55,13 @@ public sealed class WorkspaceTaskIntegrationTests
             using var provider = services.BuildServiceProvider();
             using var manager = new BackgroundTaskManager(provider);
             var validationTask = await manager.StartAsync(
-                BackgroundTaskKind.BrandPageLayoutValidation,
+                BackgroundTaskKind.BrandValidation,
                 "brand-layout:demo",
                 "demo",
-                new BrandPageLayoutValidationRequest(root, "demo"));
+                new BrandValidationRequest(root, "demo"));
             Assert.True(await manager.WaitAsync(validationTask.TaskId, TimeSpan.FromSeconds(10)));
             Assert.Equal(BackgroundTaskState.Completed, (await manager.GetAsync(validationTask.TaskId))!.State);
-            Assert.True(manager.TryGetResult<BrandPageLayoutValidationTaskResult>(validationTask.TaskId, out var validationResult));
+            Assert.True(manager.TryGetResult<BrandValidationTaskResult>(validationTask.TaskId, out var validationResult));
             Assert.True(validationResult!.Validation.IsSuccess);
 
             var task = await manager.StartAsync(

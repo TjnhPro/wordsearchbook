@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Infrastructure.WordSearch.Settings;
 
@@ -49,6 +50,8 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
             Directory.CreateDirectory(staging);
             await WriteAtomicallyAsync(Path.Combine(staging, "settings.json"), settings, cancellationToken);
             WriteDefaultPageLayout(Path.Combine(staging, "page_layout.png"));
+            Directory.CreateDirectory(Path.Combine(staging, BrandValidationDefinition.FrontRelativePath));
+            Directory.CreateDirectory(Path.Combine(staging, BrandValidationDefinition.BackRelativePath));
             try
             {
                 Directory.Move(staging, destination);

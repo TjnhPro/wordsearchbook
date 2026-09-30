@@ -29,6 +29,8 @@ public sealed class JsonWordSearchSettingsWriterTests
                 Assert.Equal(2588, layout.Width);
                 Assert.Equal(3375, layout.Height);
             }
+            Assert.True(Directory.Exists(Path.Combine(root, "brands", "new-brand", "front")));
+            Assert.True(Directory.Exists(Path.Combine(root, "brands", "new-brand", "back")));
             Assert.Empty(Directory.EnumerateDirectories(Path.Combine(root, "brands"), "*.tmp"));
         }
         finally

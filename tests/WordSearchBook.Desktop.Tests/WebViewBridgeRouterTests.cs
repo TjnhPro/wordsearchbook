@@ -119,16 +119,16 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
-    public async Task EnqueuesTypedBrandLayoutValidation()
+    public async Task EnqueuesTypedBrandValidation()
     {
         var router = CreateRouter(out var manager);
 
         using var response = JsonDocument.Parse(await router.HandleAsync(
-            """{"id":"brand-validation-1","type":"brand.layout.validate","payload":{"brandId":"demo"}}"""));
+            """{"id":"brand-validation-1","type":"brand.validate","payload":{"brandId":"demo"}}"""));
 
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Equal(BackgroundTaskKind.BrandPageLayoutValidation, manager.LastKind);
-        var request = Assert.IsType<BrandPageLayoutValidationRequest>(manager.LastRequest);
+        Assert.Equal(BackgroundTaskKind.BrandValidation, manager.LastKind);
+        var request = Assert.IsType<BrandValidationRequest>(manager.LastRequest);
         Assert.Equal("demo", request.BrandId);
         Assert.Equal(Path.GetFullPath("application-root"), request.RootPath);
     }
@@ -166,13 +166,13 @@ public sealed class WebViewBridgeRouterTests
     [InlineData("../demo")]
     [InlineData("a/b")]
     [InlineData("a\\b")]
-    public async Task RejectsUnsafeBrandLayoutValidationPayload(string brandId)
+    public async Task RejectsUnsafeBrandValidationPayload(string brandId)
     {
         var router = CreateRouter(out var manager);
         var message = JsonSerializer.Serialize(new
         {
             id = "brand-validation-invalid",
-            type = "brand.layout.validate",
+            type = "brand.validate",
             payload = new { brandId }
         });
 
@@ -197,7 +197,7 @@ public sealed class WebViewBridgeRouterTests
         var validation = new BrandValidationResult(
             new BrandValidationState(BrandValidationStatus.NotValidated),
             [new BrandValidationFailure("page_layout.png", "exists", "page_layout_not_found", "Missing")]);
-        var taskId = manager.AddCompleted(new BrandPageLayoutValidationTaskResult(snapshot, validation));
+        var taskId = manager.AddCompleted(new BrandValidationTaskResult(snapshot, validation));
         var message = JsonSerializer.Serialize(new
         {
             id = "task-detail-1",
@@ -320,7 +320,7 @@ public sealed class WebViewBridgeRouterTests
 
         public BackgroundTaskId AddCompleted(
             object result,
-            BackgroundTaskKind kind = BackgroundTaskKind.BrandPageLayoutValidation)
+            BackgroundTaskKind kind = BackgroundTaskKind.BrandValidation)
         {
             var taskId = BackgroundTaskId.New();
             tasks.Add(taskId, new BackgroundTaskSnapshot(

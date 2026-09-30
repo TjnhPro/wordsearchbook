@@ -6,11 +6,24 @@ namespace WordSearchBook.Core.Application.Workspace;
 
 public sealed record WorkspaceIssue(string Code, string Message);
 
+public sealed record WorkspaceBrandAssetFile(
+    string Name,
+    string RelativePath,
+    string Extension,
+    BrandValidationStatus Status);
+
+public sealed record WorkspaceBrandAssetFolder(
+    string Key,
+    string RelativePath,
+    bool Exists,
+    IReadOnlyList<WorkspaceBrandAssetFile> Files);
+
 public sealed record WorkspaceBrand(
     string Id,
     BrandWordSearchSettings? Settings,
-    BrandValidationState LayoutValidation,
-    WorkspaceIssue? Issue);
+    BrandValidationState Validation,
+    WorkspaceIssue? Issue,
+    IReadOnlyList<WorkspaceBrandAssetFolder> AssetFolders);
 
 public sealed record WorkspaceBook(
     string Id,
@@ -35,9 +48,9 @@ public sealed record BookBrandAssignmentTaskRequest(string RootPath, string Book
 
 public sealed record BrandCreateTaskRequest(string RootPath, string BrandId);
 
-public sealed record BrandPageLayoutValidationRequest(string RootPath, string BrandId);
+public sealed record BrandValidationRequest(string RootPath, string BrandId);
 
-public sealed record BrandPageLayoutValidationTaskResult(
+public sealed record BrandValidationTaskResult(
     WorkspaceSnapshot Snapshot,
     BrandValidationResult Validation);
 

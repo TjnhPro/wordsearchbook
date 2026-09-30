@@ -4,6 +4,7 @@ using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Core.WordSearch.Input;
 using WordSearchBook.Core.WordSearch.Settings;
 using WordSearchBook.Core.WordSearch.Validation;
+using WordSearchBook.Infrastructure.WordSearch.Validation;
 
 namespace WordSearchBook.Infrastructure.Workspace;
 
@@ -63,24 +64,64 @@ public sealed class WordSearchWorkspaceSnapshotService(
             cancellationToken.ThrowIfCancellationRequested();
             var brandId = Path.GetFileName(directory);
             var validation = await validationService.CheckStateAsync(rootPath, brandId, cancellationToken);
+            var (assetFolders, assetIssue) = ReadAssetFolders(rootPath, brandId, validation.Status);
             if (global is null)
             {
-                results.Add(new WorkspaceBrand(brandId, null, validation, globalIssue));
+                results.Add(new WorkspaceBrand(brandId, null, validation, globalIssue ?? assetIssue, assetFolders));
                 continue;
             }
 
             try
             {
                 var settings = await settingsReader.ReadBrandAsync(rootPath, brandId, global, cancellationToken);
-                results.Add(new WorkspaceBrand(brandId, settings, validation, null));
+                results.Add(new WorkspaceBrand(brandId, settings, validation, assetIssue, assetFolders));
             }
             catch (WordSearchGenerationException exception)
             {
-                results.Add(new WorkspaceBrand(brandId, null, validation, Issue(exception)));
+                results.Add(new WorkspaceBrand(brandId, null, validation, Issue(exception), assetFolders));
             }
         }
 
         return results;
+    }
+
+    private static (IReadOnlyList<WorkspaceBrandAssetFolder> Folders, WorkspaceIssue? Issue) ReadAssetFolders(
+        string rootPath,
+        string brandId,
+        BrandValidationStatus status)
+    {
+        try
+        {
+            var folders = BrandAssetDiscovery.DiscoverOptionalFolders(rootPath, brandId)
+                .Select(folder => new WorkspaceBrandAssetFolder(
+                    folder.Key,
+                    folder.RelativePath,
+                    folder.Exists,
+                    folder.Files.Select(file => new WorkspaceBrandAssetFile(
+                        file.Name,
+                        file.RelativePath,
+                        file.Extension,
+                        status)).ToArray()))
+                .ToArray();
+            return (folders, null);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            var empty = new[]
+            {
+                new WorkspaceBrandAssetFolder(
+                    BrandValidationDefinition.FrontKey,
+                    BrandValidationDefinition.FrontRelativePath,
+                    Exists: false,
+                    []),
+                new WorkspaceBrandAssetFolder(
+                    BrandValidationDefinition.BackKey,
+                    BrandValidationDefinition.BackRelativePath,
+                    Exists: false,
+                    [])
+            };
+            return (empty, new WorkspaceIssue("brand_assets_unavailable", $"Brand assets could not be read: {exception.Message}"));
+        }
     }
 
     private async Task<IReadOnlyList<WorkspaceBook>> ReadBooksAsync(

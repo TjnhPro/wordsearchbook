@@ -166,7 +166,7 @@ public sealed class WordSearchBookGenerationServiceTests
                 services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
                     new WordSearchGenerationRequest(root, "sample-book", "demo")));
 
-            Assert.Equal("brand_layout_not_validated", exception.Code);
+            Assert.Equal("brand_not_validated", exception.Code);
         }
         finally
         {
@@ -195,7 +195,7 @@ public sealed class WordSearchBookGenerationServiceTests
                 services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
                     new WordSearchGenerationRequest(root, "sample-book", "demo")));
 
-            Assert.Equal("brand_layout_not_validated", exception.Code);
+            Assert.Equal("brand_not_validated", exception.Code);
             Assert.Contains("brand_fingerprint_changed", exception.Message, StringComparison.Ordinal);
         }
         finally

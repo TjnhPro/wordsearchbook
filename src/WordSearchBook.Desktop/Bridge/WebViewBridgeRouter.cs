@@ -47,7 +47,7 @@ public sealed class WebViewBridgeRouter(
                 "book.generate" => await StartGenerationAsync(request, cancellationToken),
                 "book.brand.assign" => await SaveAssignmentAsync(request, cancellationToken),
                 "brand.create" => await CreateBrandAsync(request, cancellationToken),
-                "brand.layout.validate" => await ValidateBrandLayoutAsync(request, cancellationToken),
+                "brand.validate" => await ValidateBrandAsync(request, cancellationToken),
                 "brand.preview.draw" => await DrawBrandPreviewAsync(request, cancellationToken),
                 "brand.folder.open" => await OpenBrandFolderAsync(request, cancellationToken),
                 "settings.global.save" => await SaveGlobalSettingsAsync(request, cancellationToken),
@@ -119,16 +119,16 @@ public sealed class WebViewBridgeRouter(
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
     }
 
-    private async ValueTask<BridgeResponse> ValidateBrandLayoutAsync(
+    private async ValueTask<BridgeResponse> ValidateBrandAsync(
         BridgeRequest request,
         CancellationToken cancellationToken)
     {
         var brandId = ReadSafeBrandId(request.Payload);
         var task = await taskManager.StartAsync(
-            BackgroundTaskKind.BrandPageLayoutValidation,
-            $"brand-layout:{brandId}",
+            BackgroundTaskKind.BrandValidation,
+            $"brand-validation:{brandId}",
             brandId,
-            new BrandPageLayoutValidationRequest(rootProvider.RootPath, brandId),
+            new BrandValidationRequest(rootProvider.RootPath, brandId),
             cancellationToken);
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
     }
@@ -206,7 +206,7 @@ public sealed class WebViewBridgeRouter(
         BrandPagePreviewResult? brandPagePreviewResult = null;
         if (task.State == BackgroundTaskState.Completed)
         {
-            if (taskManager.TryGetResult<BrandPageLayoutValidationTaskResult>(taskId, out var validationTaskResult))
+            if (taskManager.TryGetResult<BrandValidationTaskResult>(taskId, out var validationTaskResult))
             {
                 result = validationTaskResult!.Snapshot;
                 brandValidationResult = validationTaskResult.Validation;
