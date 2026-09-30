@@ -1,0 +1,137 @@
+using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Infrastructure.WordSearch.Input;
+using WordSearchBook.Infrastructure.WordSearch.Settings;
+using WordSearchBook.Infrastructure.Workspace;
+
+namespace WordSearchBook.Infrastructure.Tests.Workspace;
+
+public sealed class WordSearchWorkspaceSnapshotServiceTests
+{
+    [Fact]
+    public async Task DiscoversValidBooksBrandsSettingsAndRememberedAssignment()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");
+        var service = new WordSearchWorkspaceSnapshotService(
+            new CsvWordSearchInputReader(),
+            new JsonWordSearchSettingsReader(),
+            new StubAssignmentStore(new Dictionary<string, string> { ["sample-book"] = "demo" }));
+
+        var snapshot = await service.RefreshAsync(root);
+
+        Assert.Equal(20, snapshot.GlobalSettings!.Board.Width);
+        var brand = Assert.Single(snapshot.Brands);
+        Assert.Equal("demo", brand.Id);
+        Assert.Null(brand.Issue);
+        var book = Assert.Single(snapshot.Books);
+        Assert.Equal("sample-book", book.Id);
+        Assert.Equal(1, book.TopicCount);
+        Assert.Equal("demo", book.SelectedBrandId);
+        Assert.Null(book.Issue);
+    }
+
+    [Fact]
+    public async Task KeepsInvalidBookAsAnItemLevelIssue()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            await File.WriteAllLinesAsync(
+                Path.Combine(root, "input", "sample-book", "data.csv"),
+                ["Topic,Keyword,Word Search Key", "Broken,Only One,ONLYONE"]);
+            var service = new WordSearchWorkspaceSnapshotService(
+                new CsvWordSearchInputReader(),
+                new JsonWordSearchSettingsReader(),
+                new StubAssignmentStore(new Dictionary<string, string>()));
+
+            var snapshot = await service.RefreshAsync(root);
+
+            var book = Assert.Single(snapshot.Books);
+            Assert.Equal(0, book.TopicCount);
+            Assert.Equal("topic_word_count_invalid", book.Issue!.Code);
+            Assert.Single(snapshot.Brands);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CreatesDefaultGlobalSettingsWhenWorkspaceSettingsAreMissing()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            File.Delete(Path.Combine(root, "settings.json"));
+            var service = new WordSearchWorkspaceSnapshotService(
+                new CsvWordSearchInputReader(),
+                new JsonWordSearchSettingsReader(),
+                new StubAssignmentStore(new Dictionary<string, string>()));
+
+            var snapshot = await service.RefreshAsync(root);
+
+            Assert.NotNull(snapshot.GlobalSettings);
+            Assert.Null(snapshot.GlobalSettingsIssue);
+            Assert.Equal(20, snapshot.GlobalSettings.Board.Width);
+            Assert.Equal(2400, snapshot.GlobalSettings.Page.Width);
+            Assert.True(File.Exists(Path.Combine(root, "settings.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AssignmentStorePersistsBookBrandMapping()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"word-search-state-{Guid.NewGuid():N}");
+        var path = Path.Combine(root, "workspace-state.json");
+        try
+        {
+            var store = new JsonBookBrandAssignmentStore(path);
+
+            await store.SaveAsync("sample-book", "demo");
+            var assignments = await store.ReadAsync();
+
+            Assert.Equal("demo", assignments["sample-book"]);
+            Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static string CopyFixtureToTemporaryRoot()
+    {
+        var source = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");
+        var destination = Path.Combine(Path.GetTempPath(), $"word-search-workspace-{Guid.NewGuid():N}");
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(directory.Replace(source, destination, StringComparison.Ordinal));
+        }
+
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var target = file.Replace(source, destination, StringComparison.Ordinal);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+
+        return destination;
+    }
+
+    private sealed class StubAssignmentStore(IReadOnlyDictionary<string, string> assignments) : IBookBrandAssignmentStore
+    {
+        public Task<IReadOnlyDictionary<string, string>> ReadAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(assignments);
+
+        public Task SaveAsync(string bookId, string brandId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+}

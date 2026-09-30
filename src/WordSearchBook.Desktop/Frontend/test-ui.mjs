@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { connectToDesktop } = require("./js/app.js");
+const { activateRoute, connectToDesktop, globalSettingsValue } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -46,7 +46,7 @@ test("sends a typed ping and renders the ready response", () => {
   });
 
   assert.equal(harness.statusElement.dataset.state, "ready");
-  assert.equal(harness.statusElement.textContent, "Word Search Book 0.1.0 is ready");
+  assert.equal(harness.statusElement.textContent, "Word Search Book 0.1.0");
 });
 
 test("renders a bridge error response", () => {
@@ -82,4 +82,33 @@ test("renders invalid serialized responses without throwing", () => {
 
   assert.equal(harness.statusElement.dataset.state, "error");
   assert.equal(harness.statusElement.textContent, "Desktop returned an invalid response");
+});
+
+test("activates sidebar routes and renders their detail shell", () => {
+  const navigationItems = ["books", "tasks", "settings"].map(route => ({
+    dataset: { route }, active: false,
+    classList: { owner: null, toggle(_name, active) { this.owner.active = active; } }
+  }));
+  navigationItems.forEach(item => { item.classList.owner = item; });
+  const contentElement = { innerHTML: "" };
+  const titleElement = { textContent: "" };
+
+  const route = activateRoute("tasks", { contentElement, titleElement, navigationItems });
+
+  assert.equal(route, "tasks");
+  assert.equal(titleElement.textContent, "Tasks");
+  assert.match(contentElement.innerHTML, /Background tasks/);
+  assert.deepEqual(navigationItems.map(item => item.active), [false, true, false]);
+});
+
+test("builds a typed global settings payload from form values", () => {
+  const values = new Map([
+    ["board.width", "20"], ["board.height", "20"],
+    ["page.width", "2400"], ["page.height", "3000"]
+  ]);
+
+  assert.deepEqual(globalSettingsValue(values), {
+    board: { width: 20, height: 20 },
+    page: { width: 2400, height: 3000 }
+  });
 });

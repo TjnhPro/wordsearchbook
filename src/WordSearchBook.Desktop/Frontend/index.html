@@ -8,28 +8,30 @@
     <script defer src="./js/app.js"></script>
   </head>
   <body>
-    <main class="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-12">
-      <div class="absolute -left-24 top-12 h-72 w-72 rounded-full bg-orange-200/60 blur-3xl"></div>
-      <div class="absolute -right-20 bottom-8 h-80 w-80 rounded-full bg-sky-200/60 blur-3xl"></div>
-
-      <section class="relative w-full max-w-3xl rounded-3xl border border-white/70 bg-white/80 p-10 shadow-2xl shadow-slate-900/10 backdrop-blur">
-        <p class="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-accent">Desktop workspace</p>
-        <h1 class="text-5xl font-black tracking-tight text-ink sm:text-6xl">Word Search Book</h1>
-        <p class="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-          A focused workspace for building printable word-search books.
-        </p>
-
-        <div class="mt-10 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
-          <span class="relative flex h-3 w-3">
-            <span id="status-pulse" class="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
-            <span id="status-dot" class="relative inline-flex h-3 w-3 rounded-full bg-amber-500"></span>
-          </span>
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Desktop bridge</p>
-            <p id="desktop-status" data-state="connecting" class="mt-1 font-semibold text-slate-800">Connecting…</p>
-          </div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">WS</span>
+          <span><strong class="brand-name">Word Search Book</strong><span class="brand-caption">Desktop workspace</span></span>
         </div>
-      </section>
-    </main>
+        <nav class="nav-list" aria-label="Primary navigation">
+          <button class="nav-item nav-item-active" type="button" data-route="books"><span class="nav-icon" aria-hidden="true">▦</span><span>Books</span></button>
+          <button class="nav-item" type="button" data-route="tasks"><span class="nav-icon" aria-hidden="true">◷</span><span>Tasks</span></button>
+          <button class="nav-item" type="button" data-route="settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
+        </nav>
+        <div class="bridge-card">
+          <span id="status-dot" class="status-dot status-dot-connecting" aria-hidden="true"></span>
+          <div class="min-w-0"><p class="bridge-label">Desktop bridge</p><p id="desktop-status" data-state="connecting" class="bridge-value">Connecting…</p></div>
+          <span id="status-pulse" class="status-pulse" aria-hidden="true"></span>
+        </div>
+      </aside>
+      <div class="main-column">
+        <header class="topbar">
+          <div><p class="topbar-kicker">Word Search Book</p><h1 id="page-title" class="topbar-title">Books</h1></div>
+          <div id="global-task-status" class="task-chip" data-state="idle" role="status"><span class="task-chip-dot"></span><span>No active tasks</span></div>
+        </header>
+        <main id="app-content" class="content" aria-live="polite"></main>
+      </div>
+    </div>
   </body>
 </html>

@@ -16,4 +16,11 @@
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\WordSearchBook.Desktop\WordSearchBook.Desktop.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\WordSearchBook.Infrastructure.Tests\TestData\SingleTopicBook\**\*">
+      <Link>TestData\SingleTopicBook\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
