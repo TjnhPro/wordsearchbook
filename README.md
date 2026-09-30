@@ -55,7 +55,13 @@ input/{book}/.workspace/cache/{brand}/
       └─ board-game-answer.png
 ```
 
-Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách nhiệm CSV/JSON, System.Drawing và filesystem cache. Desktop/UI chưa sử dụng workflow này trong phase hiện tại.
+Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách nhiệm CSV/JSON, System.Drawing và filesystem cache. Desktop gọi workflow này thông qua background task queue.
+
+## Desktop workspace
+
+Desktop dùng sidebar `Books`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `settings.json`, `brands/` và `input/` cạnh ứng dụng. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Tasks hiển thị queue; Settings chỉnh các JSON hiện có bằng atomic save.
+
+Mọi thao tác đọc/ghi filesystem và generate đều chạy qua một background queue tuần tự. Khi đóng ứng dụng trong lúc task đang chạy, ứng dụng hỏi xác nhận, gửi cancellation và chờ tối đa năm giây.
 
 ## License
 
