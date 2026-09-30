@@ -10,7 +10,7 @@
 
 ## Brands workspace
 
-- Use a `40/60` master-detail grid: Brand List on the left and Brand Detail on the right.
+- Use a `3/9` master-detail grid: Brand List takes 25% on the left and Brand Detail takes 75% on the right.
 - Keep the search box fixed above the Brand List. The list owns its vertical scrollbar and must not increase the page height.
 - Filter brand names case-insensitively after a `250ms` debounce. Update only the list rows; never replace the complete route while the user is typing.
 - Arrange Topic, Board game, Keyword list, and Page number editors in a `2x2` grid. Keep Answer styling in a collapsed advanced section.
