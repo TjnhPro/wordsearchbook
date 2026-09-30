@@ -16,13 +16,15 @@ public sealed class WordSearchDomainContractTests
     }
 
     [Fact]
-    public void DescribesOnlyBoardImageArtifactKindsInCurrentPhase()
+    public void DescribesBoardAndComposedPageArtifactKinds()
     {
         var kinds = Enum.GetValues<WordSearchArtifactKind>();
 
-        Assert.Equal(2, kinds.Length);
+        Assert.Equal(4, kinds.Length);
         Assert.Contains(WordSearchArtifactKind.BoardGame, kinds);
         Assert.Contains(WordSearchArtifactKind.BoardGameAnswer, kinds);
+        Assert.Contains(WordSearchArtifactKind.Page, kinds);
+        Assert.Contains(WordSearchArtifactKind.PageAnswer, kinds);
     }
 
     [Fact]
@@ -43,8 +45,10 @@ public sealed class WordSearchDomainContractTests
     {
         var settings = WordSearchSettingsDefaults.CreateBrand();
 
-        Assert.Equal(new LayoutRectangle(200, 100, 2000, 200), settings.Topic.Rectangle);
+        Assert.Equal((1200, 100, TextAlignment.Center), (settings.Topic.X, settings.Topic.Y, settings.Topic.Alignment));
         Assert.Equal(new LayoutRectangle(200, 400, 2000, 2000), settings.BoardGame.Rectangle);
+        Assert.Equal(4, settings.KeywordList.Columns.Count);
+        Assert.Equal(80, settings.KeywordList.StepY);
         Assert.Equal("Arial", settings.KeywordList.Font.Name);
         Assert.Equal(14, settings.PageNumber.Font.Size);
         Assert.Equal(new AnswerLineSettings(28, "#8B1E1E"), settings.AnswerLine);

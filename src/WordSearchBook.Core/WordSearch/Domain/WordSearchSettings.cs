@@ -10,6 +10,27 @@ public sealed record FontSettings(string Name, float Size, string Color);
 
 public sealed record TextRegionSettings(LayoutRectangle Rectangle, FontSettings Font);
 
+public enum TextAlignment
+{
+    Left,
+    Center,
+    Right
+}
+
+public sealed record AnchoredTextSettings(
+    int X,
+    int Y,
+    FontSettings Font,
+    TextAlignment Alignment);
+
+public sealed record KeywordColumnAnchor(int X, int Y);
+
+public sealed record KeywordListSettings(
+    IReadOnlyList<KeywordColumnAnchor> Columns,
+    int StepY,
+    FontSettings Font,
+    TextAlignment Alignment);
+
 public sealed record AnswerLineSettings(float Width, string Color);
 
 public sealed record GlobalWordSearchSettings(BoardSize Board, PageSize Page);
@@ -18,26 +39,35 @@ public static class WordSearchSettingsDefaults
 {
     public const int BoardWidth = 20;
     public const int BoardHeight = 20;
-    public const int PageWidth = 2400;
-    public const int PageHeight = 3000;
+    public const int PageWidth = 2588;
+    public const int PageHeight = 3375;
 
     public static GlobalWordSearchSettings CreateGlobal() => new(
         new BoardSize(BoardWidth, BoardHeight),
         new PageSize(PageWidth, PageHeight));
 
     public static BrandWordSearchSettings CreateBrand() => new(
-        new TextRegionSettings(new LayoutRectangle(200, 100, 2000, 200), new FontSettings("Arial", 36, "#1A1A1A")),
+        new AnchoredTextSettings(1200, 100, new FontSettings("Arial", 36, "#1A1A1A"), TextAlignment.Center),
         new TextRegionSettings(new LayoutRectangle(200, 400, 2000, 2000), new FontSettings("Arial", 18, "#000000")),
-        new TextRegionSettings(new LayoutRectangle(200, 2450, 2000, 400), new FontSettings("Arial", 12, "#000000")),
-        new TextRegionSettings(new LayoutRectangle(2100, 2900, 200, 80), new FontSettings("Arial", 14, "#000000")),
+        new KeywordListSettings(
+            [
+                new KeywordColumnAnchor(450, 2450),
+                new KeywordColumnAnchor(950, 2450),
+                new KeywordColumnAnchor(1450, 2450),
+                new KeywordColumnAnchor(1950, 2450)
+            ],
+            80,
+            new FontSettings("Arial", 12, "#000000"),
+            TextAlignment.Center),
+        new AnchoredTextSettings(2100, 2900, new FontSettings("Arial", 14, "#000000"), TextAlignment.Left),
         new AnswerLineSettings(28, "#8B1E1E"));
 }
 
 public sealed record BrandWordSearchSettings(
-    TextRegionSettings Topic,
+    AnchoredTextSettings Topic,
     TextRegionSettings BoardGame,
-    TextRegionSettings KeywordList,
-    TextRegionSettings PageNumber,
+    KeywordListSettings KeywordList,
+    AnchoredTextSettings PageNumber,
     AnswerLineSettings AnswerLine);
 
 public sealed record WordSearchSettingsBundle(

@@ -1,4 +1,8 @@
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Core.WordSearch.Settings;
@@ -7,7 +11,11 @@ namespace WordSearchBook.Infrastructure.WordSearch.Settings;
 
 public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader settingsReader) : IWordSearchSettingsWriter
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
     private static readonly HashSet<string> ReservedFolderNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",
@@ -40,6 +48,7 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
 
             Directory.CreateDirectory(staging);
             await WriteAtomicallyAsync(Path.Combine(staging, "settings.json"), settings, cancellationToken);
+            WriteDefaultPageLayout(Path.Combine(staging, "page_layout.png"));
             try
             {
                 Directory.Move(staging, destination);
@@ -57,7 +66,7 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
         {
             throw;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or ExternalException)
         {
             throw new WordSearchGenerationException("brand_create_failed", "The brand could not be created.", exception);
         }
@@ -75,6 +84,21 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
                 // The primary create result is more useful than a staging cleanup failure.
             }
         }
+    }
+
+    private static void WriteDefaultPageLayout(string path)
+    {
+        using var bitmap = new Bitmap(
+            WordSearchSettingsDefaults.PageWidth,
+            WordSearchSettingsDefaults.PageHeight,
+            PixelFormat.Format32bppArgb);
+        bitmap.SetResolution(300, 300);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.Clear(Color.White);
+        }
+
+        bitmap.Save(path, ImageFormat.Png);
     }
 
     public async Task SaveGlobalAsync(

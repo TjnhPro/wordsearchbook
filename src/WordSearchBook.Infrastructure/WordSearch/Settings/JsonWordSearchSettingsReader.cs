@@ -11,11 +11,14 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
 {
     private const int SupportedBoardWidth = WordSearchSettingsDefaults.BoardWidth;
     private const int SupportedBoardHeight = WordSearchSettingsDefaults.BoardHeight;
+    private const int SupportedPageWidth = WordSearchSettingsDefaults.PageWidth;
+    private const int SupportedPageHeight = WordSearchSettingsDefaults.PageHeight;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        WriteIndented = true
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public async Task<WordSearchSettingsBundle> ReadAsync(
@@ -49,9 +52,10 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentNullException.ThrowIfNull(global);
         ValidatePathSegment(brandId, nameof(brandId));
-        var brand = await ReadJsonAsync<BrandWordSearchSettings>(
+        var document = await ReadJsonAsync<BrandSettingsDocument>(
             Path.Combine(rootPath, "brands", brandId, "settings.json"),
             cancellationToken);
+        var brand = MapBrand(document);
         ValidateBrand(global, brand);
         return brand;
     }
@@ -151,19 +155,21 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
                 $"MVP board size must be {SupportedBoardWidth}x{SupportedBoardHeight}.");
         }
 
-        if (global.Page.Width <= 0 || global.Page.Height <= 0)
+        if (global.Page.Width != SupportedPageWidth || global.Page.Height != SupportedPageHeight)
         {
-            throw Invalid("Page width and height must be positive.");
+            throw new WordSearchGenerationException(
+                "page_size_unsupported",
+                $"Page size must be {SupportedPageWidth}x{SupportedPageHeight}.");
         }
-
     }
 
     internal static void ValidateBrand(GlobalWordSearchSettings global, BrandWordSearchSettings brand)
     {
-        ValidateRegion("topic", brand.Topic, global.Page);
+        ArgumentNullException.ThrowIfNull(brand);
+        ValidateAnchor("topic", brand.Topic, global.Page);
         ValidateRegion("boardGame", brand.BoardGame, global.Page);
-        ValidateRegion("keywordList", brand.KeywordList, global.Page);
-        ValidateRegion("pageNumber", brand.PageNumber, global.Page);
+        ValidateKeywordList(brand.KeywordList, global.Page);
+        ValidateAnchor("pageNumber", brand.PageNumber, global.Page);
 
         var boardRectangle = brand.BoardGame.Rectangle;
         if (boardRectangle.Width != boardRectangle.Height || boardRectangle.Width % SupportedBoardWidth != 0)
@@ -177,6 +183,97 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         }
 
         ValidateColor("answerLine.color", brand.AnswerLine.Color);
+    }
+
+    private static BrandWordSearchSettings MapBrand(BrandSettingsDocument document)
+    {
+        if (document.Topic.ValueKind == JsonValueKind.Undefined ||
+            document.KeywordList.ValueKind == JsonValueKind.Undefined ||
+            document.PageNumber.ValueKind == JsonValueKind.Undefined ||
+            document.BoardGame is null ||
+            document.AnswerLine is null)
+        {
+            throw Invalid("Brand settings require topic, boardGame, keywordList, pageNumber and answerLine objects.");
+        }
+
+        return new BrandWordSearchSettings(
+            ReadAnchor(document.Topic, "topic", TextAlignment.Center),
+            document.BoardGame,
+            ReadKeywordList(document.KeywordList),
+            ReadAnchor(document.PageNumber, "pageNumber", TextAlignment.Left),
+            document.AnswerLine);
+    }
+
+    private static AnchoredTextSettings ReadAnchor(JsonElement element, string name, TextAlignment defaultAlignment)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid($"{name} must be an object.");
+        }
+
+        if (element.TryGetProperty("rectangle", out _))
+        {
+            var legacy = element.Deserialize<LegacyTextRegionDocument>(JsonOptions)
+                ?? throw Invalid($"{name} is invalid.");
+            if (legacy.Rectangle is null || legacy.Font is null)
+            {
+                throw Invalid($"{name} requires rectangle and font objects.");
+            }
+
+            var x = defaultAlignment switch
+            {
+                TextAlignment.Center => legacy.Rectangle.X + (legacy.Rectangle.Width / 2),
+                TextAlignment.Right => legacy.Rectangle.X + legacy.Rectangle.Width,
+                _ => legacy.Rectangle.X
+            };
+            return new AnchoredTextSettings(x, legacy.Rectangle.Y, legacy.Font, defaultAlignment);
+        }
+
+        var current = element.Deserialize<AnchoredTextDocument>(JsonOptions)
+            ?? throw Invalid($"{name} is invalid.");
+        return new AnchoredTextSettings(
+            current.X,
+            current.Y,
+            current.Font ?? throw Invalid($"{name}.font is required."),
+            current.Alignment ?? defaultAlignment);
+    }
+
+    private static KeywordListSettings ReadKeywordList(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid("keywordList must be an object.");
+        }
+
+        if (element.TryGetProperty("rectangle", out _))
+        {
+            var legacy = element.Deserialize<LegacyTextRegionDocument>(JsonOptions)
+                ?? throw Invalid("keywordList is invalid.");
+            if (legacy.Rectangle is null || legacy.Font is null)
+            {
+                throw Invalid("keywordList requires rectangle and font objects.");
+            }
+
+            var columnWidth = legacy.Rectangle.Width / 4;
+            var columns = Enumerable.Range(0, 4)
+                .Select(index => new KeywordColumnAnchor(
+                    legacy.Rectangle.X + (index * columnWidth) + (columnWidth / 2),
+                    legacy.Rectangle.Y))
+                .ToArray();
+            return new KeywordListSettings(
+                columns,
+                legacy.Rectangle.Height / 5,
+                legacy.Font,
+                TextAlignment.Center);
+        }
+
+        var current = element.Deserialize<KeywordListDocument>(JsonOptions)
+            ?? throw Invalid("keywordList is invalid.");
+        return new KeywordListSettings(
+            current.Columns ?? [],
+            current.StepY,
+            current.Font ?? throw Invalid("keywordList.font is required."),
+            current.Alignment ?? TextAlignment.Center);
     }
 
     private static void ValidateRegion(string name, TextRegionSettings? region, PageSize page)
@@ -205,6 +302,69 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         ValidateColor($"{name}.font.color", region.Font.Color);
     }
 
+    private static void ValidateAnchor(string name, AnchoredTextSettings? region, PageSize page)
+    {
+        if (region?.Font is null)
+        {
+            throw Invalid($"{name} requires a font object.");
+        }
+
+        if (region.X < 0 || region.X > page.Width || region.Y < 0 || region.Y > page.Height)
+        {
+            throw Invalid($"{name} anchor must stay inside the configured page.");
+        }
+
+        ValidateFont(name, region.Font);
+        ValidateAlignment(name, region.Alignment);
+    }
+
+    private static void ValidateKeywordList(KeywordListSettings? region, PageSize page)
+    {
+        if (region?.Font is null || region.Columns is null)
+        {
+            throw Invalid("keywordList requires columns and font objects.");
+        }
+
+        if (region.Columns.Count != 4)
+        {
+            throw Invalid("keywordList.columns must contain exactly four anchors.");
+        }
+
+        if (region.StepY <= 0)
+        {
+            throw Invalid("keywordList.stepY must be positive.");
+        }
+
+        foreach (var column in region.Columns)
+        {
+            if (column is null || column.X < 0 || column.X > page.Width || column.Y < 0 || column.Y > page.Height)
+            {
+                throw Invalid("Every keywordList column anchor must stay inside the configured page.");
+            }
+        }
+
+        ValidateFont("keywordList", region.Font);
+        ValidateAlignment("keywordList", region.Alignment);
+    }
+
+    private static void ValidateFont(string name, FontSettings font)
+    {
+        if (string.IsNullOrWhiteSpace(font.Name) || font.Size <= 0)
+        {
+            throw Invalid($"{name}.font requires a name and positive size.");
+        }
+
+        ValidateColor($"{name}.font.color", font.Color);
+    }
+
+    private static void ValidateAlignment(string name, TextAlignment alignment)
+    {
+        if (!Enum.IsDefined(alignment))
+        {
+            throw Invalid($"{name}.alignment is invalid.");
+        }
+    }
+
     private static void ValidateColor(string fieldName, string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || !HexColorPattern().IsMatch(value))
@@ -223,6 +383,23 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
     }
 
     private static WordSearchGenerationException Invalid(string message) => new("settings_invalid", message);
+
+    private sealed record BrandSettingsDocument(
+        JsonElement Topic,
+        TextRegionSettings? BoardGame,
+        JsonElement KeywordList,
+        JsonElement PageNumber,
+        AnswerLineSettings? AnswerLine);
+
+    private sealed record LegacyTextRegionDocument(LayoutRectangle? Rectangle, FontSettings? Font);
+
+    private sealed record AnchoredTextDocument(int X, int Y, FontSettings? Font, TextAlignment? Alignment);
+
+    private sealed record KeywordListDocument(
+        IReadOnlyList<KeywordColumnAnchor>? Columns,
+        int StepY,
+        FontSettings? Font,
+        TextAlignment? Alignment);
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")]
     private static partial Regex HexColorPattern();

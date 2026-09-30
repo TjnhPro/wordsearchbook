@@ -23,7 +23,9 @@ public enum BackgroundTaskKind
     BookGeneration,
     SettingsSave,
     BookBrandAssignmentSave,
-    BrandCreate
+    BrandCreate,
+    BrandPageLayoutValidation,
+    BrandPagePreview
 }
 
 public enum BackgroundTaskState

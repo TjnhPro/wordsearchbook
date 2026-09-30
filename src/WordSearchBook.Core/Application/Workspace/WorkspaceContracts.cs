@@ -1,4 +1,6 @@
 using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Application;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Core.Application.Workspace;
 
@@ -7,6 +9,7 @@ public sealed record WorkspaceIssue(string Code, string Message);
 public sealed record WorkspaceBrand(
     string Id,
     BrandWordSearchSettings? Settings,
+    BrandValidationState LayoutValidation,
     WorkspaceIssue? Issue);
 
 public sealed record WorkspaceBook(
@@ -31,6 +34,14 @@ public sealed record BookGenerationTaskRequest(string RootPath, string BookId, s
 public sealed record BookBrandAssignmentTaskRequest(string RootPath, string BookId, string BrandId);
 
 public sealed record BrandCreateTaskRequest(string RootPath, string BrandId);
+
+public sealed record BrandPageLayoutValidationRequest(string RootPath, string BrandId);
+
+public sealed record BrandPageLayoutValidationTaskResult(
+    WorkspaceSnapshot Snapshot,
+    BrandValidationResult Validation);
+
+public sealed record BrandPagePreviewTaskRequest(string RootPath, string BrandId);
 
 public abstract record SettingsSaveTaskRequest(string RootPath);
 

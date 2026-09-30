@@ -1,16 +1,20 @@
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WordSearchBook.Core.Application;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Desktop.Bridge;
 
 public sealed class WebViewBridgeRouter(
     IApplicationInfoProvider applicationInfoProvider,
     IBackgroundTaskManager taskManager,
-    IApplicationRootProvider rootProvider)
+    IApplicationRootProvider rootProvider,
+    IBrandFolderActionService brandFolderActionService)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -43,6 +47,9 @@ public sealed class WebViewBridgeRouter(
                 "book.generate" => await StartGenerationAsync(request, cancellationToken),
                 "book.brand.assign" => await SaveAssignmentAsync(request, cancellationToken),
                 "brand.create" => await CreateBrandAsync(request, cancellationToken),
+                "brand.layout.validate" => await ValidateBrandLayoutAsync(request, cancellationToken),
+                "brand.preview.draw" => await DrawBrandPreviewAsync(request, cancellationToken),
+                "brand.folder.open" => await OpenBrandFolderAsync(request, cancellationToken),
                 "settings.global.save" => await SaveGlobalSettingsAsync(request, cancellationToken),
                 "settings.brand.save" => await SaveBrandSettingsAsync(request, cancellationToken),
                 "task.list" => Success(
@@ -58,6 +65,10 @@ public sealed class WebViewBridgeRouter(
         catch (Exception exception) when (exception is ArgumentException or JsonException)
         {
             return Serialize(Failure(request.Id, "invalid_payload", "The bridge message payload is invalid."));
+        }
+        catch (BrandFolderActionException exception)
+        {
+            return Serialize(Failure(request.Id, exception.Code, exception.Message));
         }
         catch (ObjectDisposedException)
         {
@@ -108,6 +119,43 @@ public sealed class WebViewBridgeRouter(
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
     }
 
+    private async ValueTask<BridgeResponse> ValidateBrandLayoutAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var brandId = ReadSafeBrandId(request.Payload);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.BrandPageLayoutValidation,
+            $"brand-layout:{brandId}",
+            brandId,
+            new BrandPageLayoutValidationRequest(rootProvider.RootPath, brandId),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> DrawBrandPreviewAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var brandId = ReadSafeBrandId(request.Payload);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.BrandPagePreview,
+            $"brand-preview:{brandId}",
+            brandId,
+            new BrandPagePreviewTaskRequest(rootProvider.RootPath, brandId),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> OpenBrandFolderAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var brandId = ReadSafeBrandId(request.Payload);
+        await brandFolderActionService.OpenAsync(rootProvider.RootPath, brandId, cancellationToken);
+        return Success(request.Id!, "brand.folder.opened", new BrandFolderOpened(brandId));
+    }
+
     private async ValueTask<BridgeResponse> SaveGlobalSettingsAsync(
         BridgeRequest request,
         CancellationToken cancellationToken)
@@ -154,12 +202,33 @@ public sealed class WebViewBridgeRouter(
         }
 
         WorkspaceSnapshot? result = null;
+        BrandValidationResult? brandValidationResult = null;
+        BrandPagePreviewResult? brandPagePreviewResult = null;
         if (task.State == BackgroundTaskState.Completed)
         {
-            taskManager.TryGetResult(taskId, out result);
+            if (taskManager.TryGetResult<BrandPageLayoutValidationTaskResult>(taskId, out var validationTaskResult))
+            {
+                result = validationTaskResult!.Snapshot;
+                brandValidationResult = validationTaskResult.Validation;
+            }
+            else if (taskManager.TryGetResult<BrandPagePreviewResult>(taskId, out var previewResult))
+            {
+                brandPagePreviewResult = previewResult;
+            }
+            else
+            {
+                taskManager.TryGetResult(taskId, out result);
+            }
         }
 
-        return Success(request.Id!, "background.task.detail", new BackgroundTaskDetail(BackgroundTaskBridgeSnapshot.From(task), result));
+        return Success(
+            request.Id!,
+            "background.task.detail",
+            new BackgroundTaskDetail(
+                BackgroundTaskBridgeSnapshot.From(task),
+                result,
+                brandValidationResult,
+                brandPagePreviewResult));
     }
 
     private async ValueTask<BridgeResponse> CancelTaskAsync(BridgeRequest request, CancellationToken cancellationToken)
@@ -196,6 +265,27 @@ public sealed class WebViewBridgeRouter(
         }
 
         return taskId;
+    }
+
+    private static string ReadSafeBrandId(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } value ||
+            !value.TryGetProperty("brandId", out var brandValue))
+        {
+            throw new ArgumentException("brandId is required.");
+        }
+
+        var brandId = brandValue.GetString();
+        ArgumentException.ThrowIfNullOrWhiteSpace(brandId);
+        if (brandId is "." or ".." ||
+            brandId.Contains('/') ||
+            brandId.Contains('\\') ||
+            brandId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("brandId must be a single safe path segment.");
+        }
+
+        return brandId;
     }
 
     private static T ReadSettings<T>(JsonElement? payload)

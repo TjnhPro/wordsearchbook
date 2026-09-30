@@ -1,4 +1,5 @@
 using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
@@ -17,8 +18,8 @@ public sealed class JsonWordSearchSettingsReaderTests
 
             Assert.Equal(20, settings.Board.Width);
             Assert.Equal(20, settings.Board.Height);
-            Assert.Equal(2400, settings.Page.Width);
-            Assert.Equal(3000, settings.Page.Height);
+            Assert.Equal(2588, settings.Page.Width);
+            Assert.Equal(3375, settings.Page.Height);
             var json = await File.ReadAllTextAsync(Path.Combine(root, "settings.json"));
             Assert.Contains("\"board\"", json, StringComparison.Ordinal);
             Assert.Contains("\"page\"", json, StringComparison.Ordinal);
@@ -38,8 +39,11 @@ public sealed class JsonWordSearchSettingsReaderTests
         var settings = await new JsonWordSearchSettingsReader().ReadAsync(root, "demo");
 
         Assert.Equal(20, settings.Global.Board.Width);
-        Assert.Equal(3000, settings.Global.Page.Height);
+        Assert.Equal(3375, settings.Global.Page.Height);
         Assert.Equal(2000, settings.Brand.BoardGame.Rectangle.Width);
+        Assert.Equal(TextAlignment.Center, settings.Brand.Topic.Alignment);
+        Assert.Equal(4, settings.Brand.KeywordList.Columns.Count);
+        Assert.Equal(80, settings.Brand.KeywordList.StepY);
         Assert.Equal("Arial", settings.Brand.BoardGame.Font.Name);
         Assert.Equal("#8B1E1E", settings.Brand.AnswerLine.Color);
     }
@@ -65,10 +69,10 @@ public sealed class JsonWordSearchSettingsReaderTests
     }
 
     [Fact]
-    public async Task RejectsRectangleOutsidePage()
+    public async Task RejectsAnchorOutsidePage()
     {
         var root = await CreateTemporarySettingsAsync(brandTransform: json =>
-            json.Replace("\"x\": 2100, \"y\": 2900", "\"x\": 2300, \"y\": 2950", StringComparison.Ordinal));
+            json.Replace("\"x\": 2100, \"y\": 2900", "\"x\": 2600, \"y\": 2900", StringComparison.Ordinal));
 
         try
         {
@@ -76,7 +80,7 @@ public sealed class JsonWordSearchSettingsReaderTests
                 new JsonWordSearchSettingsReader().ReadAsync(root, "demo"));
 
             Assert.Equal("settings_invalid", exception.Code);
-            Assert.Contains("inside", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("anchor", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

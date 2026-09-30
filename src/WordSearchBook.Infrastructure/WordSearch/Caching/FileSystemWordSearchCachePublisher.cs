@@ -190,6 +190,8 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
     {
         WordSearchArtifactKind.BoardGame => "board-game.png",
         WordSearchArtifactKind.BoardGameAnswer => "board-game-answer.png",
+        WordSearchArtifactKind.Page => "page.png",
+        WordSearchArtifactKind.PageAnswer => "page-answer.png",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 
@@ -197,6 +199,8 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
     {
         WordSearchArtifactKind.BoardGame => "boardGame",
         WordSearchArtifactKind.BoardGameAnswer => "boardGameAnswer",
+        WordSearchArtifactKind.Page => "page",
+        WordSearchArtifactKind.PageAnswer => "pageAnswer",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 

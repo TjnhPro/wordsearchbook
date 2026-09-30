@@ -8,10 +8,12 @@ using WordSearchBook.Core.WordSearch.Generation;
 using WordSearchBook.Core.WordSearch.Input;
 using WordSearchBook.Core.WordSearch.Rendering;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.WordSearch.Caching;
 using WordSearchBook.Infrastructure.WordSearch.Input;
 using WordSearchBook.Infrastructure.WordSearch.Rendering;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
+using WordSearchBook.Infrastructure.WordSearch.Validation;
 using WordSearchBook.Infrastructure.Workspace;
 
 namespace WordSearchBook.Infrastructure.DependencyInjection;
@@ -26,8 +28,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWordSearchInputReader, CsvWordSearchInputReader>();
         services.AddSingleton<IWordSearchSettingsReader, JsonWordSearchSettingsReader>();
         services.AddSingleton<IWordSearchSettingsWriter, JsonWordSearchSettingsWriter>();
+        services.AddSingleton<IBrandValidationStateStore, JsonBrandValidationStateStore>();
+        services.AddSingleton<IBrandValidationService, BrandValidationService>();
         services.AddSingleton<IWordSearchPuzzleGenerator, WordSearchPuzzleGenerator>();
         services.AddSingleton<IWordSearchBoardRenderer, SystemDrawingWordSearchBoardRenderer>();
+        services.AddSingleton<IWordSearchPageRenderer, SystemDrawingWordSearchPageRenderer>();
+        services.AddSingleton<IBrandPagePreviewService, BrandPagePreviewService>();
         services.AddSingleton<IWordSearchCachePublisher, FileSystemWordSearchCachePublisher>();
         services.AddSingleton<IWordSearchBookGenerationService, WordSearchBookGenerationService>();
         services.AddSingleton<IBookBrandAssignmentStore, JsonBookBrandAssignmentStore>();
@@ -37,6 +43,8 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookBrandAssignmentWorker>(BackgroundTaskKind.BookBrandAssignmentSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, SettingsSaveWorker>(BackgroundTaskKind.SettingsSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BrandCreateWorker>(BackgroundTaskKind.BrandCreate);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, BrandPageLayoutValidationWorker>(BackgroundTaskKind.BrandPageLayoutValidation);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, BrandPagePreviewWorker>(BackgroundTaskKind.BrandPagePreview);
         return services;
     }
 }

@@ -19,6 +19,7 @@ public partial class App : Application
         services.AddWordSearchBookInfrastructure();
         services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
         services.AddSingleton<IApplicationRootProvider, ExecutableApplicationRootProvider>();
+        services.AddSingleton<IBrandFolderActionService, BrandFolderActionService>();
         services.AddSingleton<WebViewBridgeRouter>();
         services.AddSingleton<MainWindow>();
 

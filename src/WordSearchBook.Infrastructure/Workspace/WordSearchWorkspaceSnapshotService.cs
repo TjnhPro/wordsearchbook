@@ -3,12 +3,14 @@ using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Core.WordSearch.Input;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Infrastructure.Workspace;
 
 public sealed class WordSearchWorkspaceSnapshotService(
     IWordSearchInputReader inputReader,
     IWordSearchSettingsReader settingsReader,
+    IBrandValidationService validationService,
     IBookBrandAssignmentStore assignmentStore) : IWorkspaceSnapshotService
 {
     public async Task<WorkspaceSnapshot> RefreshAsync(
@@ -60,20 +62,21 @@ public sealed class WordSearchWorkspaceSnapshotService(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var brandId = Path.GetFileName(directory);
+            var validation = await validationService.CheckStateAsync(rootPath, brandId, cancellationToken);
             if (global is null)
             {
-                results.Add(new WorkspaceBrand(brandId, null, globalIssue));
+                results.Add(new WorkspaceBrand(brandId, null, validation, globalIssue));
                 continue;
             }
 
             try
             {
                 var settings = await settingsReader.ReadBrandAsync(rootPath, brandId, global, cancellationToken);
-                results.Add(new WorkspaceBrand(brandId, settings, null));
+                results.Add(new WorkspaceBrand(brandId, settings, validation, null));
             }
             catch (WordSearchGenerationException exception)
             {
-                results.Add(new WorkspaceBrand(brandId, null, Issue(exception)));
+                results.Add(new WorkspaceBrand(brandId, null, validation, Issue(exception)));
             }
         }
 

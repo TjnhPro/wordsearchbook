@@ -4,6 +4,7 @@ using WordSearchBook.Core.WordSearch.Generation;
 using WordSearchBook.Core.WordSearch.Input;
 using WordSearchBook.Core.WordSearch.Rendering;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Core.WordSearch.Application;
 
@@ -12,7 +13,9 @@ public sealed class WordSearchBookGenerationService(
     IWordSearchSettingsReader settingsReader,
     IWordSearchPuzzleGenerator puzzleGenerator,
     IWordSearchBoardRenderer boardRenderer,
-    IWordSearchCachePublisher cachePublisher) : IWordSearchBookGenerationService
+    IWordSearchPageRenderer pageRenderer,
+    IWordSearchCachePublisher cachePublisher,
+    IBrandValidationService validationService) : IWordSearchBookGenerationService
 {
     public async Task<WordSearchGenerationResult> GenerateAsync(
         WordSearchGenerationRequest request,
@@ -30,9 +33,19 @@ public sealed class WordSearchBookGenerationService(
         ValidatePathSegment(request.BookId, nameof(request.BookId));
         ValidatePathSegment(request.BrandId, nameof(request.BrandId));
 
+        var layoutValidation = await validationService.CheckStateAsync(rootPath, request.BrandId, cancellationToken);
+        if (layoutValidation.Status != BrandValidationStatus.Validated)
+        {
+            var reason = layoutValidation.ReasonCode is null ? string.Empty : $" Reason: {layoutValidation.ReasonCode}.";
+            throw new WordSearchGenerationException(
+                "brand_layout_not_validated",
+                $"Brand '{request.BrandId}' page layout must be validated before generation.{reason}");
+        }
+
         var normalizedRequest = request with { RootPath = rootPath };
         var settings = await settingsReader.ReadAsync(rootPath, request.BrandId, cancellationToken);
         var dataCsvPath = Path.Combine(rootPath, "input", request.BookId, "data.csv");
+        var pageLayoutPath = Path.Combine(rootPath, "brands", request.BrandId, "page_layout.png");
         var topics = await inputReader.ReadAsync(dataCsvPath, cancellationToken);
         var generatedTopics = new List<WordSearchTopicArtifactSet>(topics.Count);
 
@@ -42,14 +55,18 @@ public sealed class WordSearchBookGenerationService(
             var puzzle = puzzleGenerator.Generate(
                 topic.Entries.Select(entry => entry.WordSearchKey).ToArray(),
                 settings.Global.Board);
+            var board = boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame);
+            var answerBoard = boardRenderer.RenderAnswer(
+                puzzle,
+                settings.Global.Board,
+                settings.Brand.BoardGame,
+                settings.Brand.AnswerLine);
             var artifacts = new RenderedWordSearchArtifact[]
             {
-                boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame),
-                boardRenderer.RenderAnswer(
-                    puzzle,
-                    settings.Global.Board,
-                    settings.Brand.BoardGame,
-                    settings.Brand.AnswerLine)
+                board,
+                answerBoard,
+                pageRenderer.Render(pageLayoutPath, topic, topic.Index, board, settings, WordSearchArtifactKind.Page),
+                pageRenderer.Render(pageLayoutPath, topic, topic.Index, answerBoard, settings, WordSearchArtifactKind.PageAnswer)
             };
 
             generatedTopics.Add(new WordSearchTopicArtifactSet(topic, artifacts, puzzle.Placements));

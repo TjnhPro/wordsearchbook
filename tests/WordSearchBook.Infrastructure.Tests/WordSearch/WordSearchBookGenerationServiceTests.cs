@@ -1,7 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.DependencyInjection;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
@@ -9,21 +12,27 @@ namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 public sealed class WordSearchBookGenerationServiceTests
 {
     [Fact]
-    public async Task GeneratesTwoBoardArtifactsAndManifestThenAtomicallyReplacesCache()
+    public async Task GeneratesBoardAndPageArtifactsAndManifestThenAtomicallyReplacesCache()
     {
         var root = CopyFixtureToTemporaryRoot();
         try
         {
             using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
             var service = services.GetRequiredService<IWordSearchBookGenerationService>();
             var request = new WordSearchGenerationRequest(root, "sample-book", "demo");
 
             var result = await service.GenerateAsync(request);
 
             var topic = Assert.Single(result.Topics);
-            Assert.Equal(2, topic.Artifacts.Count);
+            Assert.Equal(4, topic.Artifacts.Count);
             Assert.Equal(
-                [WordSearchArtifactKind.BoardGame, WordSearchArtifactKind.BoardGameAnswer],
+                [
+                    WordSearchArtifactKind.BoardGame,
+                    WordSearchArtifactKind.BoardGameAnswer,
+                    WordSearchArtifactKind.Page,
+                    WordSearchArtifactKind.PageAnswer
+                ],
                 topic.Artifacts.Select(artifact => artifact.Kind));
             Assert.Equal(20, topic.Placements.Count);
             Assert.True(File.Exists(result.ManifestPath));
@@ -39,7 +48,9 @@ public sealed class WordSearchBookGenerationServiceTests
                 Assert.Equal("RED PANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("keyword").GetString());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("entries").GetArrayLength());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("placements").GetArrayLength());
-                Assert.Equal(2, manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").EnumerateObject().Count());
+                Assert.Equal(4, manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").EnumerateObject().Count());
+                Assert.Equal("topics/001/page.png", manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").GetProperty("page").GetString());
+                Assert.Equal("topics/001/page-answer.png", manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").GetProperty("pageAnswer").GetString());
             }
 
             var sentinel = Path.Combine(cacheDirectory, "old-cache.txt");
@@ -62,6 +73,7 @@ public sealed class WordSearchBookGenerationServiceTests
         try
         {
             using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
             var service = services.GetRequiredService<IWordSearchBookGenerationService>();
             var request = new WordSearchGenerationRequest(root, "sample-book", "demo");
             var successful = await service.GenerateAsync(request);
@@ -103,12 +115,13 @@ public sealed class WordSearchBookGenerationServiceTests
             await File.WriteAllLinesAsync(dataPath, [lines[0], .. lines.Skip(1), .. secondTopicRows]);
 
             using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
             var result = await services.GetRequiredService<IWordSearchBookGenerationService>()
                 .GenerateAsync(new WordSearchGenerationRequest(root, "sample-book", "demo"));
 
             Assert.Equal(2, result.Topics.Count);
             Assert.Equal([1, 2], result.Topics.Select(topic => topic.Index));
-            Assert.All(result.Topics, topic => Assert.Equal(2, topic.Artifacts.Count));
+            Assert.All(result.Topics, topic => Assert.Equal(4, topic.Artifacts.Count));
             Assert.Contains(result.Topics[1].Artifacts, artifact => artifact.RelativePath.StartsWith("topics/002/", StringComparison.Ordinal));
         }
         finally
@@ -140,11 +153,68 @@ public sealed class WordSearchBookGenerationServiceTests
         }
     }
 
+    [Fact]
+    public async Task RejectsGenerationBeforeReadingInputWhenLayoutIsNotCertified()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            File.Delete(Path.Combine(root, "input", "sample-book", "data.csv"));
+            using var services = BuildServices();
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
+                    new WordSearchGenerationRequest(root, "sample-book", "demo")));
+
+            Assert.Equal("brand_layout_not_validated", exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RejectsGenerationWhenCertifiedLayoutMetadataChanges()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            using var services = BuildServices();
+            await CertifyLayoutAsync(services, root);
+            await using (var stream = new FileStream(
+                Path.Combine(root, "brands", "demo", "page_layout.png"),
+                FileMode.Append,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                await stream.WriteAsync(new byte[] { 0 });
+            }
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
+                    new WordSearchGenerationRequest(root, "sample-book", "demo")));
+
+            Assert.Equal("brand_layout_not_validated", exception.Code);
+            Assert.Contains("brand_fingerprint_changed", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ServiceProvider BuildServices()
     {
         var services = new ServiceCollection();
         services.AddWordSearchBookInfrastructure();
         return services.BuildServiceProvider();
+    }
+
+    private static async Task CertifyLayoutAsync(IServiceProvider services, string root)
+    {
+        var result = await services.GetRequiredService<IBrandValidationService>().ValidateAsync(root, "demo");
+        Assert.True(result.IsSuccess);
     }
 
     private static string CopyFixtureToTemporaryRoot()
@@ -159,6 +229,14 @@ public sealed class WordSearchBookGenerationServiceTests
             var destinationFile = Path.Combine(destination, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             File.Copy(sourceFile, destinationFile);
+        }
+
+        var layoutPath = Path.Combine(destination, "brands", "demo", "page_layout.png");
+        using (var layout = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb))
+        {
+            using var graphics = Graphics.FromImage(layout);
+            graphics.Clear(Color.White);
+            layout.Save(layoutPath, ImageFormat.Png);
         }
 
         return destination;
