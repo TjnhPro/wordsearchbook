@@ -147,8 +147,10 @@ function anchoredTextEditor(name, label, region) {
 }
 
 function keywordListEditor(region) {
-  const anchors = region.columns.map((column, index) => `${settingInput(`keywordList.column${index + 1}X`, `Column ${index + 1} X`, column.x)}${settingInput(`keywordList.column${index + 1}Y`, `Column ${index + 1} Y`, column.y)}`).join("");
-  return `<fieldset class="settings-group brand-region-card"><legend>Keyword list</legend><p class="brand-region-help">20 keywords fill top-to-bottom: 5 words per column.</p><div class="brand-region-fields">${anchors}${settingInput("keywordList.stepY", "Vertical step", region.stepY, "number", "min=\"1\"")}${alignmentInput("keywordList.alignment", region.alignment)}${fontInputs("keywordList", region.font)}</div></fieldset>`;
+  const columnXInputs = region.columns.map((column, index) =>
+    settingInput(`keywordList.column${index + 1}X`, `Column ${index + 1} X`, column.x)).join("");
+  const columnY = region.columns[0]?.y ?? 0;
+  return `<fieldset class="settings-group brand-region-card"><legend>Keyword list</legend><p class="brand-region-help">20 keywords fill top-to-bottom: 5 words per column with one shared starting Y.</p><div class="brand-region-fields">${columnXInputs}${settingInput("keywordList.columnY", "Column Y", columnY)}${settingInput("keywordList.stepY", "Vertical step", region.stepY, "number", "min=\"1\"")}${alignmentInput("keywordList.alignment", region.alignment)}${settingInput("keywordList.fontName", "Font", region.font.name, "text")}${settingInput("keywordList.fontSize", "Font size", region.font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("keywordList.fontColor", "Font color", region.font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset>`;
 }
 
 function brandRowsMarkup(brands, selectedBrandId) {
@@ -226,8 +228,9 @@ function anchoredTextValue(data, name) {
   };
 }
 function keywordListValue(data) {
+  const columnY = numberValue(data, "keywordList.columnY");
   return {
-    columns: [1, 2, 3, 4].map(index => ({ x: numberValue(data, `keywordList.column${index}X`), y: numberValue(data, `keywordList.column${index}Y`) })),
+    columns: [1, 2, 3, 4].map(index => ({ x: numberValue(data, `keywordList.column${index}X`), y: columnY })),
     stepY: numberValue(data, "keywordList.stepY"),
     font: { name: String(data.get("keywordList.fontName") ?? ""), size: numberValue(data, "keywordList.fontSize"), color: String(data.get("keywordList.fontColor") ?? "") },
     alignment: String(data.get("keywordList.alignment") ?? "")

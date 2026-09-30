@@ -136,8 +136,8 @@ test("builds a complete typed brand settings payload", () => {
   addRegion("boardGame", 11, "Calibri");
   [1, 2, 3, 4].forEach(index => {
     values.set(`keywordList.column${index}X`, String(index * 100));
-    values.set(`keywordList.column${index}Y`, String(index * 100 + 1));
   });
+  values.set("keywordList.columnY", "2100");
   values.set("keywordList.stepY", "80");
   values.set("keywordList.alignment", "Right");
   addFont("keywordList", "Verdana");
@@ -154,7 +154,7 @@ test("builds a complete typed brand settings payload", () => {
   });
   assert.deepEqual(settings.boardGame.rectangle, { x: 11, y: 12, width: 13, height: 14 });
   assert.deepEqual(settings.keywordList.columns, [
-    { x: 100, y: 101 }, { x: 200, y: 201 }, { x: 300, y: 301 }, { x: 400, y: 401 }
+    { x: 100, y: 2100 }, { x: 200, y: 2100 }, { x: 300, y: 2100 }, { x: 400, y: 2100 }
   ]);
   assert.equal(settings.keywordList.stepY, 80);
   assert.equal(settings.keywordList.alignment, "Right");

@@ -25,7 +25,7 @@
 - Books may list any Brand with readable settings, but **Generate pages** stays disabled until that Brand's layout state is `Validated`.
 - Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
 - Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.
-- Keyword list exposes four independent X/Y anchors and one shared vertical step. The 20 keywords fill column-major with five rows per column; alignment applies to every keyword.
+- Keyword list exposes four independent X anchors, one shared Column Y, and one shared vertical step. Arrange the two-column form as X1/X2, X3/X4, Column Y/Vertical step, Alignment/Font, then Font size/Font color. The 20 keywords fill column-major with five rows per column; alignment applies to every keyword.
 - Brand Detail may scroll independently when needed. Keep its brand name, save state, and Save button visible.
 - Do not redraw a dirty Brand Detail during task polling. Save through the background queue and retain the draft when saving fails.
 - Before changing brand or leaving the Brands route with unsaved edits, require an explicit Save, Discard, or Cancel choice.
