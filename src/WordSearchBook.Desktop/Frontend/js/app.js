@@ -5,7 +5,7 @@ const routeDefinitions = {
   settings: { title: "Settings", heading: "Workspace settings", copy: "Review and edit global board and page settings." }
 };
 const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
-const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null, client: null, pollTimers: new Map() };
+const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null, brandSearchQuery: "", client: null, pollTimers: new Map() };
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]);
@@ -14,6 +14,18 @@ function escapeHtml(value) {
 function parseBridgeData(data) { return typeof data === "string" ? JSON.parse(data) : data; }
 function issueMarkup(issue) { return issue ? `<p class="issue-text">${escapeHtml(issue.message)}</p>` : ""; }
 function badge(label, tone = "neutral") { return `<span class="badge badge-${tone}">${escapeHtml(label)}</span>`; }
+function filterBrands(brands, query) {
+  const normalized = String(query ?? "").trim().toLocaleLowerCase();
+  return normalized ? brands.filter(brand => brand.id.toLocaleLowerCase().includes(normalized)) : brands;
+}
+function createDebouncedAction(callback, delay = 250, timers = globalThis) {
+  let timerId;
+  return value => {
+    if (timerId !== undefined) timers.clearTimeout(timerId);
+    timerId = timers.setTimeout(() => callback(value), delay);
+  };
+}
+function shouldRenderForTaskUpdate(routeName, snapshotChanged) { return routeName !== "brands" || snapshotChanged; }
 
 function renderBooks() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Scanning workspace…</p><p class="empty-panel-copy">Books and brands are loaded by a background task.</p></div>`;
@@ -53,6 +65,11 @@ function regionEditor(name, label, region) {
   return `<fieldset class="settings-group brand-region-card"><legend>${label}</legend><div class="brand-region-fields">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${settingInput(`${name}.fontName`, "Font", font.name, "text")}${settingInput(`${name}.fontSize`, "Font size", font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput(`${name}.fontColor`, "Font color", font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset>`;
 }
 
+function brandRowsMarkup(brands, selectedBrandId) {
+  if (!brands.length) return `<div class="brand-list-empty"><strong>No matching brands</strong><p>Try a different brand name.</p></div>`;
+  return brands.map(brand => `<button class="brand-row ${brand.id === selectedBrandId ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-id="${escapeHtml(brand.id)}"><span><strong>${escapeHtml(brand.id)}</strong><small>${brand.settings ? "Layout available" : "Settings need attention"}</small></span>${brand.settings ? badge("Ready", "good") : badge("Invalid", "bad")}</button>`).join("");
+}
+
 function renderBrands() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading brands…</p></div>`;
   const brands = state.snapshot.brands ?? [];
@@ -61,8 +78,9 @@ function renderBrands() {
     state.selectedBrandId = brands.find(brand => brand.settings)?.id ?? brands[0].id;
   }
   const selected = brands.find(brand => brand.id === state.selectedBrandId);
-  const rows = brands.map(brand => `<button class="brand-row ${brand.id === selected.id ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-id="${escapeHtml(brand.id)}"><span><strong>${escapeHtml(brand.id)}</strong><small>${brand.settings ? "Layout available" : "Settings need attention"}</small></span>${brand.settings ? badge("Ready", "good") : badge("Invalid", "bad")}</button>`).join("");
-  const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p>${brands.length} discovered</p></div></div><div class="brand-list-scroll">${rows}</div></section>`;
+  const filteredBrands = filterBrands(brands, state.brandSearchQuery);
+  const rows = brandRowsMarkup(filteredBrands, selected.id);
+  const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p data-brand-result-count>${filteredBrands.length} of ${brands.length} shown</p></div></div><label class="brand-search"><span class="sr-only">Search brands by name</span><input type="search" data-action="search-brands" value="${escapeHtml(state.brandSearchQuery)}" placeholder="Search brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${rows}</div></section>`;
   if (!selected.settings) {
     return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Invalid", "bad")}</div><div class="brand-detail-scroll">${issueMarkup(selected.issue)}</div></section></div>`;
   }
@@ -179,18 +197,32 @@ function refreshGlobalTaskStatus(documentRoot) {
 }
 
 function initializeWorkspace(documentRoot, render) {
-  const applyAndRender = () => { render(state.route); refreshGlobalTaskStatus(documentRoot); };
+  const renderCurrentRoute = () => { render(state.route); refreshGlobalTaskStatus(documentRoot); };
+  const applyTaskUpdate = snapshotChanged => {
+    if (shouldRenderForTaskUpdate(state.route, snapshotChanged)) render(state.route);
+    refreshGlobalTaskStatus(documentRoot);
+  };
+  const updateBrandSearch = createDebouncedAction(query => {
+    state.brandSearchQuery = query;
+    const brands = state.snapshot?.brands ?? [];
+    const filteredBrands = filterBrands(brands, query);
+    const list = documentRoot.querySelector("[data-brand-list]");
+    const count = documentRoot.querySelector("[data-brand-result-count]");
+    if (list) list.innerHTML = brandRowsMarkup(filteredBrands, state.selectedBrandId);
+    if (count) count.textContent = `${filteredBrands.length} of ${brands.length} shown`;
+  });
   const listTasks = () => state.client.send("task.list", undefined, response => {
     if (response.ok) state.tasks = response.data ?? [];
-    applyAndRender();
+    applyTaskUpdate(false);
   });
   const pollTask = taskId => {
     state.client.send("task.get", { taskId }, response => {
       if (!response.ok) return;
       const task = response.data.task;
       upsertTask(task);
-      if (response.data.result) state.snapshot = response.data.result;
-      applyAndRender();
+      const snapshotChanged = Boolean(response.data.result);
+      if (snapshotChanged) state.snapshot = response.data.result;
+      applyTaskUpdate(snapshotChanged);
       if (activeTaskStates.has(task.state)) {
         state.pollTimers.set(taskId, globalThis.setTimeout(() => pollTask(taskId), 250));
       } else {
@@ -202,19 +234,23 @@ function initializeWorkspace(documentRoot, render) {
   const start = (type, payload) => state.client.send(type, payload, response => {
     if (!response.ok) return;
     upsertTask(response.data);
-    applyAndRender();
+    applyTaskUpdate(false);
     pollTask(response.data.taskId);
   });
 
   documentRoot.addEventListener("click", event => {
     const target = event.target.closest?.("[data-action]");
     if (!target) return;
-    if (target.dataset.action === "select-book") { state.selectedBookId = target.dataset.bookId; applyAndRender(); }
-    if (target.dataset.action === "select-brand") { state.selectedBrandId = target.dataset.brandId; applyAndRender(); }
+    if (target.dataset.action === "select-book") { state.selectedBookId = target.dataset.bookId; renderCurrentRoute(); }
+    if (target.dataset.action === "select-brand") { state.selectedBrandId = target.dataset.brandId; renderCurrentRoute(); }
     if (target.dataset.action === "refresh") start("workspace.refresh");
     if (target.dataset.action === "list-tasks") listTasks();
     if (target.dataset.action === "generate") start("book.generate", { bookId: target.dataset.bookId, brandId: target.dataset.brandId });
     if (target.dataset.action === "cancel-task") start("task.cancel", { taskId: target.dataset.taskId });
+  });
+  documentRoot.addEventListener("input", event => {
+    const target = event.target;
+    if (target.dataset?.action === "search-brands") updateBrandSearch(target.value);
   });
   documentRoot.addEventListener("change", event => {
     const target = event.target;
@@ -251,6 +287,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, brandSettingsValue, connectToDesktop, createBridgeClient, globalSettingsValue, initializeNavigation };
+const api = { activateRoute, brandSettingsValue, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, initializeNavigation, shouldRenderForTaskUpdate };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

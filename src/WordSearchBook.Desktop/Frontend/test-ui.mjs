@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, connectToDesktop, globalSettingsValue } = require("./js/app.js");
+const { activateRoute, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, shouldRenderForTaskUpdate } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -111,4 +111,39 @@ test("builds a typed global settings payload from form values", () => {
     board: { width: 20, height: 20 },
     page: { width: 2400, height: 3000 }
   });
+});
+
+test("filters brands by a trimmed case-insensitive name fragment", () => {
+  const brands = [{ id: "Classic-Orange" }, { id: "Modern-Blue" }, { id: "Minimal" }];
+
+  assert.deepEqual(filterBrands(brands, "  ORANGE ").map(brand => brand.id), ["Classic-Orange"]);
+  assert.deepEqual(filterBrands(brands, "m").map(brand => brand.id), ["Modern-Blue", "Minimal"]);
+  assert.equal(filterBrands(brands, "missing").length, 0);
+});
+
+test("debounces brand search and applies only the latest query", () => {
+  const scheduled = new Map();
+  let nextId = 0;
+  const timers = {
+    setTimeout(callback, delay) { const id = ++nextId; scheduled.set(id, { callback, delay }); return id; },
+    clearTimeout(id) { scheduled.delete(id); }
+  };
+  const values = [];
+  const search = createDebouncedAction(value => values.push(value), 250, timers);
+
+  search("a");
+  search("ab");
+  search("abc");
+
+  assert.equal(scheduled.size, 1);
+  const pending = [...scheduled.values()][0];
+  assert.equal(pending.delay, 250);
+  pending.callback();
+  assert.deepEqual(values, ["abc"]);
+});
+
+test("does not redraw the Brands route for task-only polling updates", () => {
+  assert.equal(shouldRenderForTaskUpdate("brands", false), false);
+  assert.equal(shouldRenderForTaskUpdate("brands", true), true);
+  assert.equal(shouldRenderForTaskUpdate("tasks", false), true);
 });

@@ -101,6 +101,11 @@
   .brand-panel-header h3 { @apply mt-1 text-lg font-bold text-slate-950; }
   .brand-panel-header p:not(.eyebrow) { @apply mt-1 text-xs text-slate-500; }
   .brand-list-scroll { @apply min-h-0 flex-1 space-y-1 overflow-y-auto p-3; }
+  .brand-search { @apply block shrink-0 border-b border-slate-100 px-4 py-3; }
+  .brand-search input { @apply w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-100; }
+  .brand-list-empty { @apply px-4 py-10 text-center; }
+  .brand-list-empty strong { @apply text-sm text-slate-700; }
+  .brand-list-empty p { @apply mt-1 text-xs text-slate-500; }
   .brand-row { @apply flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50; }
   .brand-row-active { @apply bg-orange-50 hover:bg-orange-50; }
   .brand-row strong, .brand-row small { @apply block; }
