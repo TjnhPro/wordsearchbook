@@ -1,8 +1,5 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
-using System.Drawing.Text;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
@@ -12,8 +9,6 @@ namespace WordSearchBook.Infrastructure.WordSearch.Rendering;
 
 public sealed class SystemDrawingWordSearchBoardRenderer : IWordSearchBoardRenderer
 {
-    private const float OutputDpi = 300f;
-
     public RenderedWordSearchArtifact RenderData(
         WordSearchPuzzle puzzle,
         BoardSize boardSize,
@@ -51,21 +46,20 @@ public sealed class SystemDrawingWordSearchBoardRenderer : IWordSearchBoardRende
         {
             var rectangle = boardStyle.Rectangle;
             var cellSize = rectangle.Width / boardSize.Width;
-            using var font = CreateFont(boardStyle.Font);
-            using var textBrush = new SolidBrush(ParseColor(boardStyle.Font.Color));
-            using var bitmap = new Bitmap(rectangle.Width, rectangle.Height, PixelFormat.Format32bppArgb);
-            bitmap.SetResolution(OutputDpi, OutputDpi);
+            using var font = SystemDrawingRenderSupport.CreateFont(boardStyle.Font);
+            using var textBrush = new SolidBrush(SystemDrawingRenderSupport.ParseColor(boardStyle.Font.Color));
+            using var bitmap = SystemDrawingRenderSupport.CreateBitmap(rectangle.Width, rectangle.Height);
 
             using (var graphics = Graphics.FromImage(bitmap))
             {
-                ConfigureGraphics(graphics);
+                SystemDrawingRenderSupport.Configure(graphics);
                 graphics.Clear(Color.White);
                 EnsureGlyphsFit(graphics, font, puzzle.Data, cellSize);
                 DrawGrid(graphics, puzzle.Data, font, textBrush, cellSize);
 
                 if (answerLine is not null)
                 {
-                    using var pen = new Pen(ParseColor(answerLine.Color), answerLine.Width)
+                    using var pen = new Pen(SystemDrawingRenderSupport.ParseColor(answerLine.Color), answerLine.Width)
                     {
                         EndCap = LineCap.Round,
                         StartCap = LineCap.Round,
@@ -86,9 +80,7 @@ public sealed class SystemDrawingWordSearchBoardRenderer : IWordSearchBoardRende
                 }
             }
 
-            using var output = new MemoryStream();
-            bitmap.Save(output, ImageFormat.Png);
-            return new RenderedWordSearchArtifact(kind, output.ToArray(), bitmap.Width, bitmap.Height);
+            return SystemDrawingRenderSupport.EncodePng(kind, bitmap);
         }
         catch (WordSearchGenerationException)
         {
@@ -133,20 +125,6 @@ public sealed class SystemDrawingWordSearchBoardRenderer : IWordSearchBoardRende
                 throw Invalid($"Placement '{placement.WordSearchKey}' contains an invalid cell.");
             }
         }
-    }
-
-    private static Font CreateFont(FontSettings settings)
-    {
-        var familyName = FontFamily.Families
-            .Select(family => family.Name)
-            .FirstOrDefault(name => string.Equals(name, settings.Name, StringComparison.OrdinalIgnoreCase));
-
-        if (familyName is null)
-        {
-            throw new WordSearchGenerationException("font_unavailable", $"Font '{settings.Name}' is not installed.");
-        }
-
-        return new Font(familyName, settings.Size, FontStyle.Regular);
     }
 
     private static void EnsureGlyphsFit(Graphics graphics, Font font, char[,] data, int cellSize)
@@ -199,37 +177,6 @@ public sealed class SystemDrawingWordSearchBoardRenderer : IWordSearchBoardRende
 
     private static PointF Center(int x, int y, int cellSize) =>
         new((x * cellSize) + (cellSize / 2f), (y * cellSize) + (cellSize / 2f));
-
-    private static void ConfigureGraphics(Graphics graphics)
-    {
-        graphics.SmoothingMode = SmoothingMode.None;
-        graphics.PixelOffsetMode = PixelOffsetMode.None;
-        graphics.CompositingQuality = CompositingQuality.HighSpeed;
-        graphics.TextRenderingHint = TextRenderingHint.AntiAlias;
-    }
-
-    private static Color ParseColor(string value)
-    {
-        if (value.Length == 7)
-        {
-            return Color.FromArgb(
-                255,
-                int.Parse(value.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                int.Parse(value.AsSpan(3, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                int.Parse(value.AsSpan(5, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-        }
-
-        if (value.Length == 9)
-        {
-            return Color.FromArgb(
-                int.Parse(value.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                int.Parse(value.AsSpan(3, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                int.Parse(value.AsSpan(5, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture),
-                int.Parse(value.AsSpan(7, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
-        }
-
-        throw Invalid($"Color '{value}' is invalid.");
-    }
 
     private static WordSearchGenerationException Invalid(string message) => new("render_input_invalid", message);
 }
