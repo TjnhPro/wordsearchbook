@@ -30,7 +30,8 @@ public sealed record WorkspaceBook(
     int TopicCount,
     string? SelectedBrandId,
     IReadOnlyList<string> CachedBrandIds,
-    WorkspaceIssue? Issue);
+    WorkspaceIssue? Issue,
+    BookDataValidationState? DataValidation = null);
 
 public sealed record WorkspaceSnapshot(
     string RootPath,
@@ -43,6 +44,12 @@ public sealed record WorkspaceSnapshot(
 public sealed record WorkspaceRefreshRequest(string RootPath);
 
 public sealed record BookGenerationTaskRequest(string RootPath, string BookId, string BrandId);
+
+public sealed record BookDataValidationRequest(string RootPath, string BookId);
+
+public sealed record BookDataValidationTaskResult(
+    WorkspaceSnapshot Snapshot,
+    BookDataValidationResult Validation);
 
 public sealed record BookBrandAssignmentTaskRequest(string RootPath, string BookId, string BrandId);
 

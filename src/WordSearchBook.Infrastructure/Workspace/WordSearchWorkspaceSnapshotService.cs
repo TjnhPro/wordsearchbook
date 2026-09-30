@@ -9,7 +9,7 @@ using WordSearchBook.Infrastructure.WordSearch.Validation;
 namespace WordSearchBook.Infrastructure.Workspace;
 
 public sealed class WordSearchWorkspaceSnapshotService(
-    IWordSearchInputReader inputReader,
+    IBookDataValidationService bookDataValidationService,
     IWordSearchSettingsReader settingsReader,
     IBrandValidationService validationService,
     IBookBrandAssignmentStore assignmentStore) : IWorkspaceSnapshotService
@@ -149,15 +149,14 @@ public sealed class WordSearchWorkspaceSnapshotService(
             }
 
             var cachedBrands = ReadCachedBrands(directory);
-            try
-            {
-                var topics = await inputReader.ReadAsync(Path.Combine(directory, "data.csv"), cancellationToken);
-                results.Add(new WorkspaceBook(bookId, topics.Count, selectedBrandId, cachedBrands, null));
-            }
-            catch (WordSearchGenerationException exception)
-            {
-                results.Add(new WorkspaceBook(bookId, 0, selectedBrandId, cachedBrands, Issue(exception)));
-            }
+            var validation = await bookDataValidationService.CheckStateAsync(rootPath, bookId, cancellationToken);
+            results.Add(new WorkspaceBook(
+                bookId,
+                validation.TopicCount,
+                selectedBrandId,
+                cachedBrands,
+                DataIssue(validation),
+                validation));
         }
 
         return results;
@@ -181,4 +180,18 @@ public sealed class WordSearchWorkspaceSnapshotService(
     }
 
     private static WorkspaceIssue Issue(WordSearchGenerationException exception) => new(exception.Code, exception.Message);
+
+    private static WorkspaceIssue? DataIssue(BookDataValidationState validation) => validation.Status switch
+    {
+        BookDataValidationStatus.Validated => null,
+        BookDataValidationStatus.Invalid when validation.Failures?.FirstOrDefault() is { } failure =>
+            new WorkspaceIssue(failure.Code, failure.Message),
+        BookDataValidationStatus.Invalid =>
+            new WorkspaceIssue("book_data_invalid", "data.csv is invalid."),
+        BookDataValidationStatus.NeedsValidation =>
+            new WorkspaceIssue(
+                validation.ReasonCode ?? "book_data_needs_validation",
+                "data.csv changed and must be validated again."),
+        _ => new WorkspaceIssue("book_data_not_validated", "data.csv has not been validated.")
+    };
 }

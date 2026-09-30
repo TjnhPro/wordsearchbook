@@ -112,7 +112,7 @@ public sealed class CsvWordSearchInputReaderTests
     public async Task RejectsDuplicateNormalizedWordSearchKey()
     {
         var rows = CreateValidRows();
-        rows[1] = "Animals,Duplicate Keyword,WORDAB";
+        rows[1] = "Animals,Duplicate,WORDAB";
         var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
 
         try

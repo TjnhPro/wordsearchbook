@@ -254,6 +254,11 @@ public sealed class WordSearchBookGenerationServiceTests
         foreach (var sourceFile in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(source, sourceFile);
+            if (relativePath.Split(Path.DirectorySeparatorChar).Contains(".workspace", StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var destinationFile = Path.Combine(destination, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             File.Copy(sourceFile, destinationFile);
