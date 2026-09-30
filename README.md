@@ -38,7 +38,27 @@ dotnet run --project src/WordSearchBook.Desktop/WordSearchBook.Desktop.csproj
 
 ## Trạng thái baseline
 
-Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tên ứng dụng, version và trạng thái `ready`. Logic domain tạo word-search book sẽ được bổ sung ở các phase sau.
+Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tên ứng dụng, version và trạng thái `ready`. Word Search Core MVP đã hoạt động độc lập ở backend nhưng chưa được nối vào Desktop/UI.
+
+## Word Search Core MVP
+
+Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
+
+`IWordSearchBookGenerationService` sinh năm PNG cho mỗi Topic và publish atomically vào:
+
+```text
+input/{book}/.workspace/cache/{brand}/
+├─ manifest.json
+└─ topics/
+   └─ 001/
+      ├─ topic.png
+      ├─ board-game.png
+      ├─ board-game-answer.png
+      ├─ keyword-list.png
+      └─ page-number.png
+```
+
+Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách nhiệm CSV/JSON, System.Drawing và filesystem cache. Desktop/UI chưa sử dụng workflow này trong phase hiện tại.
 
 ## License
 
