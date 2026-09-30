@@ -12,6 +12,7 @@ public sealed class WordSearchBookGenerationService(
     IWordSearchSettingsReader settingsReader,
     IWordSearchPuzzleGenerator puzzleGenerator,
     IWordSearchBoardRenderer boardRenderer,
+    IWordSearchPageRenderer pageRenderer,
     IWordSearchCachePublisher cachePublisher) : IWordSearchBookGenerationService
 {
     public async Task<WordSearchGenerationResult> GenerateAsync(
@@ -33,6 +34,7 @@ public sealed class WordSearchBookGenerationService(
         var normalizedRequest = request with { RootPath = rootPath };
         var settings = await settingsReader.ReadAsync(rootPath, request.BrandId, cancellationToken);
         var dataCsvPath = Path.Combine(rootPath, "input", request.BookId, "data.csv");
+        var pageLayoutPath = Path.Combine(rootPath, "brands", request.BrandId, "page_layout.png");
         var topics = await inputReader.ReadAsync(dataCsvPath, cancellationToken);
         var generatedTopics = new List<WordSearchTopicArtifactSet>(topics.Count);
 
@@ -42,14 +44,18 @@ public sealed class WordSearchBookGenerationService(
             var puzzle = puzzleGenerator.Generate(
                 topic.Entries.Select(entry => entry.WordSearchKey).ToArray(),
                 settings.Global.Board);
+            var board = boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame);
+            var answerBoard = boardRenderer.RenderAnswer(
+                puzzle,
+                settings.Global.Board,
+                settings.Brand.BoardGame,
+                settings.Brand.AnswerLine);
             var artifacts = new RenderedWordSearchArtifact[]
             {
-                boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame),
-                boardRenderer.RenderAnswer(
-                    puzzle,
-                    settings.Global.Board,
-                    settings.Brand.BoardGame,
-                    settings.Brand.AnswerLine)
+                board,
+                answerBoard,
+                pageRenderer.Render(pageLayoutPath, topic, topic.Index, board, settings, WordSearchArtifactKind.Page),
+                pageRenderer.Render(pageLayoutPath, topic, topic.Index, answerBoard, settings, WordSearchArtifactKind.PageAnswer)
             };
 
             generatedTopics.Add(new WordSearchTopicArtifactSet(topic, artifacts, puzzle.Placements));

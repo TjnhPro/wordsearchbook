@@ -16,13 +16,15 @@ public sealed class WordSearchDomainContractTests
     }
 
     [Fact]
-    public void DescribesBoardImageArtifactKindsBeforePageComposition()
+    public void DescribesBoardAndComposedPageArtifactKinds()
     {
         var kinds = Enum.GetValues<WordSearchArtifactKind>();
 
-        Assert.Equal(2, kinds.Length);
+        Assert.Equal(4, kinds.Length);
         Assert.Contains(WordSearchArtifactKind.BoardGame, kinds);
         Assert.Contains(WordSearchArtifactKind.BoardGameAnswer, kinds);
+        Assert.Contains(WordSearchArtifactKind.Page, kinds);
+        Assert.Contains(WordSearchArtifactKind.PageAnswer, kinds);
     }
 
     [Fact]

@@ -5,7 +5,9 @@ namespace WordSearchBook.Core.WordSearch.Contracts;
 public enum WordSearchArtifactKind
 {
     BoardGame,
-    BoardGameAnswer
+    BoardGameAnswer,
+    Page,
+    PageAnswer
 }
 
 public sealed record WordSearchGenerationRequest(

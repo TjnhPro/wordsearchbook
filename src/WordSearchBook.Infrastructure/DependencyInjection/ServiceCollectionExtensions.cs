@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWordSearchSettingsWriter, JsonWordSearchSettingsWriter>();
         services.AddSingleton<IWordSearchPuzzleGenerator, WordSearchPuzzleGenerator>();
         services.AddSingleton<IWordSearchBoardRenderer, SystemDrawingWordSearchBoardRenderer>();
+        services.AddSingleton<IWordSearchPageRenderer, SystemDrawingWordSearchPageRenderer>();
         services.AddSingleton<IWordSearchCachePublisher, FileSystemWordSearchCachePublisher>();
         services.AddSingleton<IWordSearchBookGenerationService, WordSearchBookGenerationService>();
         services.AddSingleton<IBookBrandAssignmentStore, JsonBookBrandAssignmentStore>();

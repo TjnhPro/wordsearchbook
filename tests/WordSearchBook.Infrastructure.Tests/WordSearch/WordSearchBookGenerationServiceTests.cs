@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
@@ -9,7 +11,7 @@ namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 public sealed class WordSearchBookGenerationServiceTests
 {
     [Fact]
-    public async Task GeneratesTwoBoardArtifactsAndManifestThenAtomicallyReplacesCache()
+    public async Task GeneratesBoardAndPageArtifactsAndManifestThenAtomicallyReplacesCache()
     {
         var root = CopyFixtureToTemporaryRoot();
         try
@@ -21,9 +23,14 @@ public sealed class WordSearchBookGenerationServiceTests
             var result = await service.GenerateAsync(request);
 
             var topic = Assert.Single(result.Topics);
-            Assert.Equal(2, topic.Artifacts.Count);
+            Assert.Equal(4, topic.Artifacts.Count);
             Assert.Equal(
-                [WordSearchArtifactKind.BoardGame, WordSearchArtifactKind.BoardGameAnswer],
+                [
+                    WordSearchArtifactKind.BoardGame,
+                    WordSearchArtifactKind.BoardGameAnswer,
+                    WordSearchArtifactKind.Page,
+                    WordSearchArtifactKind.PageAnswer
+                ],
                 topic.Artifacts.Select(artifact => artifact.Kind));
             Assert.Equal(20, topic.Placements.Count);
             Assert.True(File.Exists(result.ManifestPath));
@@ -39,7 +46,9 @@ public sealed class WordSearchBookGenerationServiceTests
                 Assert.Equal("RED PANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("keyword").GetString());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("entries").GetArrayLength());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("placements").GetArrayLength());
-                Assert.Equal(2, manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").EnumerateObject().Count());
+                Assert.Equal(4, manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").EnumerateObject().Count());
+                Assert.Equal("topics/001/page.png", manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").GetProperty("page").GetString());
+                Assert.Equal("topics/001/page-answer.png", manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").GetProperty("pageAnswer").GetString());
             }
 
             var sentinel = Path.Combine(cacheDirectory, "old-cache.txt");
@@ -108,7 +117,7 @@ public sealed class WordSearchBookGenerationServiceTests
 
             Assert.Equal(2, result.Topics.Count);
             Assert.Equal([1, 2], result.Topics.Select(topic => topic.Index));
-            Assert.All(result.Topics, topic => Assert.Equal(2, topic.Artifacts.Count));
+            Assert.All(result.Topics, topic => Assert.Equal(4, topic.Artifacts.Count));
             Assert.Contains(result.Topics[1].Artifacts, artifact => artifact.RelativePath.StartsWith("topics/002/", StringComparison.Ordinal));
         }
         finally
@@ -159,6 +168,14 @@ public sealed class WordSearchBookGenerationServiceTests
             var destinationFile = Path.Combine(destination, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             File.Copy(sourceFile, destinationFile);
+        }
+
+        var layoutPath = Path.Combine(destination, "brands", "demo", "page_layout.png");
+        using (var layout = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb))
+        {
+            using var graphics = Graphics.FromImage(layout);
+            graphics.Clear(Color.White);
+            layout.Save(layoutPath, ImageFormat.Png);
         }
 
         return destination;
