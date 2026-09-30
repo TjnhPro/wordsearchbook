@@ -102,6 +102,40 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
+    public async Task EnqueuesTypedBrandSettingsSave()
+    {
+        var router = CreateRouter(out var manager);
+        const string region = """{"rectangle":{"x":10,"y":20,"width":2000,"height":2000},"font":{"name":"Arial","size":24,"color":"#112233"}}""";
+        var message = $$"""
+            {
+              "id": "brand-settings-1",
+              "type": "settings.brand.save",
+              "payload": {
+                "brandId": "demo",
+                "settings": {
+                  "topic": {{region}},
+                  "boardGame": {{region}},
+                  "keywordList": {{region}},
+                  "pageNumber": {{region}},
+                  "answerLine": { "width": 2.5, "color": "#AABBCC" }
+                }
+              }
+            }
+            """;
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(message));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(BackgroundTaskKind.SettingsSave, manager.LastKind);
+        var request = Assert.IsType<BrandSettingsSaveTaskRequest>(manager.LastRequest);
+        Assert.Equal("demo", request.BrandId);
+        Assert.Equal(10, request.Settings.Topic.Rectangle.X);
+        Assert.Equal("Arial", request.Settings.BoardGame.Font.Name);
+        Assert.Equal(2.5f, request.Settings.AnswerLine.Width);
+        Assert.Equal("#AABBCC", request.Settings.AnswerLine.Color);
+    }
+
+    [Fact]
     public void ResolvesFrontendEntryPointBelowBaseDirectory()
     {
         var baseDirectory = Path.Combine(Path.GetTempPath(), "word-search-book-tests");

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, brandNavigationDisposition, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate } = require("./js/app.js");
+const { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -111,6 +111,36 @@ test("builds a typed global settings payload from form values", () => {
     board: { width: 20, height: 20 },
     page: { width: 2400, height: 3000 }
   });
+});
+
+test("builds a complete typed brand settings payload", () => {
+  const values = new Map();
+  const addRegion = (name, start, font) => {
+    values.set(`${name}.x`, String(start));
+    values.set(`${name}.y`, String(start + 1));
+    values.set(`${name}.width`, String(start + 2));
+    values.set(`${name}.height`, String(start + 3));
+    values.set(`${name}.fontName`, font);
+    values.set(`${name}.fontSize`, "24.5");
+    values.set(`${name}.fontColor`, "#112233");
+  };
+  addRegion("topic", 1, "Arial");
+  addRegion("boardGame", 11, "Calibri");
+  addRegion("keywordList", 21, "Verdana");
+  addRegion("pageNumber", 31, "Tahoma");
+  values.set("answerLine.width", "2.5");
+  values.set("answerLine.color", "#AABBCC");
+
+  const settings = brandSettingsValue(values);
+
+  assert.deepEqual(settings.topic, {
+    rectangle: { x: 1, y: 2, width: 3, height: 4 },
+    font: { name: "Arial", size: 24.5, color: "#112233" }
+  });
+  assert.deepEqual(settings.boardGame.rectangle, { x: 11, y: 12, width: 13, height: 14 });
+  assert.deepEqual(settings.keywordList.rectangle, { x: 21, y: 22, width: 23, height: 24 });
+  assert.deepEqual(settings.pageNumber.rectangle, { x: 31, y: 32, width: 33, height: 34 });
+  assert.deepEqual(settings.answerLine, { width: 2.5, color: "#AABBCC" });
 });
 
 test("filters brands by a trimmed case-insensitive name fragment", () => {
