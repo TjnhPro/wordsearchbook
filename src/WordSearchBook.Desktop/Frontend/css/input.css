@@ -100,6 +100,12 @@
   .brand-panel-header { @apply flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 px-5 py-4; }
   .brand-panel-header h3 { @apply mt-1 text-lg font-bold text-slate-950; }
   .brand-panel-header p:not(.eyebrow) { @apply mt-1 text-xs text-slate-500; }
+  .brand-save-actions { @apply flex items-center gap-3; }
+  .brand-save-status { @apply text-xs font-semibold; }
+  .brand-save-status[data-state="saved"] { @apply text-emerald-700; }
+  .brand-save-status[data-state="dirty"] { @apply text-amber-700; }
+  .brand-save-status[data-state="saving"] { @apply text-slate-500; }
+  .brand-save-message { @apply mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700; }
   .brand-list-scroll { @apply min-h-0 flex-1 space-y-1 overflow-y-auto p-3; }
   .brand-search { @apply block shrink-0 border-b border-slate-100 px-4 py-3; }
   .brand-search input { @apply w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-100; }
@@ -117,4 +123,9 @@
   .brand-region-fields { @apply grid grid-cols-2 gap-3; }
   .answer-styling { @apply mt-4 rounded-xl border border-slate-200 p-4; }
   .answer-styling summary { @apply cursor-pointer text-sm font-bold text-slate-700; }
+  .unsaved-dialog { @apply w-full max-w-md rounded-2xl border-0 bg-white p-6 text-slate-900 shadow-2xl; }
+  .unsaved-dialog::backdrop { @apply bg-slate-950/40 backdrop-blur-sm; }
+  .unsaved-dialog h2 { @apply text-lg font-bold; }
+  .unsaved-dialog p { @apply mt-2 text-sm leading-6 text-slate-500; }
+  .unsaved-dialog-actions { @apply mt-6 flex justify-end gap-3; }
 }

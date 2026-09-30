@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, shouldRenderForTaskUpdate } = require("./js/app.js");
+const { activateRoute, brandNavigationDisposition, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -145,5 +145,24 @@ test("debounces brand search and applies only the latest query", () => {
 test("does not redraw the Brands route for task-only polling updates", () => {
   assert.equal(shouldRenderForTaskUpdate("brands", false), false);
   assert.equal(shouldRenderForTaskUpdate("brands", true), true);
+  assert.equal(shouldRenderForTaskUpdate("brands", true, true), false);
   assert.equal(shouldRenderForTaskUpdate("tasks", false), true);
+});
+
+test("detects a changed brand draft against its saved baseline", () => {
+  const settings = {
+    topic: { rectangle: { x: 1, y: 2, width: 3, height: 4 }, font: { name: "Arial", size: 12, color: "#000000" } },
+    boardGame: {}, keywordList: {}, pageNumber: {}, answerLine: { width: 2, color: "#FF0000" }
+  };
+  const baseline = JSON.stringify(settings);
+
+  assert.equal(hasBrandSettingsChanged(settings, baseline), false);
+  assert.equal(hasBrandSettingsChanged({ ...settings, answerLine: { ...settings.answerLine, width: 3 } }, baseline), true);
+});
+
+test("guards navigation while a brand is dirty or saving", () => {
+  assert.equal(brandNavigationDisposition("brands", true, false), "prompt");
+  assert.equal(brandNavigationDisposition("brands", true, true), "blocked");
+  assert.equal(brandNavigationDisposition("brands", false, false), "apply");
+  assert.equal(brandNavigationDisposition("books", true, false), "apply");
 });

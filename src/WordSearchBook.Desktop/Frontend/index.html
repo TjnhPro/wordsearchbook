@@ -34,5 +34,14 @@
         <main id="app-content" class="content" aria-live="polite"></main>
       </div>
     </div>
+    <dialog id="unsaved-brand-dialog" class="unsaved-dialog" aria-labelledby="unsaved-brand-title">
+      <h2 id="unsaved-brand-title">Unsaved brand changes</h2>
+      <p>Save your changes before leaving this brand?</p>
+      <div class="unsaved-dialog-actions">
+        <button class="button-secondary" type="button" data-action="dirty-cancel">Cancel</button>
+        <button class="button-secondary" type="button" data-action="dirty-discard">Discard</button>
+        <button class="button-primary" type="button" data-action="dirty-save">Save changes</button>
+      </div>
+    </dialog>
   </body>
 </html>

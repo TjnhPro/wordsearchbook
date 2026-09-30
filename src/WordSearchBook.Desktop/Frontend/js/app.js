@@ -5,7 +5,11 @@ const routeDefinitions = {
   settings: { title: "Settings", heading: "Workspace settings", copy: "Review and edit global board and page settings." }
 };
 const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
-const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null, brandSearchQuery: "", client: null, pollTimers: new Map() };
+const state = {
+  route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null,
+  brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false,
+  brandSaving: false, pendingNavigation: null, client: null, pollTimers: new Map()
+};
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]);
@@ -25,7 +29,34 @@ function createDebouncedAction(callback, delay = 250, timers = globalThis) {
     timerId = timers.setTimeout(() => callback(value), delay);
   };
 }
-function shouldRenderForTaskUpdate(routeName, snapshotChanged) { return routeName !== "brands" || snapshotChanged; }
+function canonicalBrandSettings(settings) { return JSON.stringify(settings); }
+function hasBrandSettingsChanged(settings, baseline) { return canonicalBrandSettings(settings) !== baseline; }
+function shouldRenderForTaskUpdate(routeName, snapshotChanged, brandDirty = false) {
+  return routeName !== "brands" || (snapshotChanged && !brandDirty);
+}
+function brandNavigationDisposition(routeName, brandDirty, brandSaving) {
+  if (brandSaving) return "blocked";
+  return routeName === "brands" && brandDirty ? "prompt" : "apply";
+}
+function applyNavigation(destination, render) {
+  if (destination.kind === "brand") {
+    state.selectedBrandId = destination.value;
+    render("brands");
+    return;
+  }
+  render(destination.value);
+}
+function requestNavigation(destination, documentRoot, render) {
+  const disposition = brandNavigationDisposition(state.route, state.brandDirty, state.brandSaving);
+  if (disposition === "blocked") return false;
+  if (disposition === "prompt") {
+    state.pendingNavigation = destination;
+    documentRoot.querySelector("#unsaved-brand-dialog")?.showModal();
+    return false;
+  }
+  applyNavigation(destination, render);
+  return true;
+}
 
 function renderBooks() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Scanning workspace…</p><p class="empty-panel-copy">Books and brands are loaded by a background task.</p></div>`;
@@ -78,6 +109,11 @@ function renderBrands() {
     state.selectedBrandId = brands.find(brand => brand.settings)?.id ?? brands[0].id;
   }
   const selected = brands.find(brand => brand.id === state.selectedBrandId);
+  if (state.brandBaselineId !== selected.id || !state.brandDirty) {
+    state.brandBaselineId = selected.id;
+    state.brandBaseline = selected.settings ? canonicalBrandSettings(selected.settings) : null;
+    state.brandDirty = false;
+  }
   const filteredBrands = filterBrands(brands, state.brandSearchQuery);
   const rows = brandRowsMarkup(filteredBrands, selected.id);
   const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p data-brand-result-count>${filteredBrands.length} of ${brands.length} shown</p></div></div><label class="brand-search"><span class="sr-only">Search brands by name</span><input type="search" data-action="search-brands" value="${escapeHtml(state.brandSearchQuery)}" placeholder="Search brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${rows}</div></section>`;
@@ -85,7 +121,7 @@ function renderBrands() {
     return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Invalid", "bad")}</div><div class="brand-detail-scroll">${issueMarkup(selected.issue)}</div></section></div>`;
   }
   const settings = selected.settings;
-  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><button class="button-primary" type="submit">Save brand</button></div><div class="brand-detail-scroll"><div class="brand-region-grid">${regionEditor("topic", "Topic", settings.topic)}${regionEditor("boardGame", "Board game", settings.boardGame)}${regionEditor("keywordList", "Keyword list", settings.keywordList)}${regionEditor("pageNumber", "Page number", settings.pageNumber)}</div><details class="answer-styling"><summary>Answer styling</summary><div class="settings-grid mt-5">${settingInput("answerLine.width", "Line width", settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Line color", settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></details></div></form>`;
+  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="saved">All changes saved</span><button class="button-primary" data-brand-save-button type="submit" disabled>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${regionEditor("topic", "Topic", settings.topic)}${regionEditor("boardGame", "Board game", settings.boardGame)}${regionEditor("keywordList", "Keyword list", settings.keywordList)}${regionEditor("pageNumber", "Page number", settings.pageNumber)}</div><details class="answer-styling"><summary>Answer styling</summary><div class="settings-grid mt-5">${settingInput("answerLine.width", "Line width", settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Line color", settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></details></div></form>`;
   return `<div class="brand-workspace">${list}${detail}</div>`;
 }
 
@@ -179,7 +215,10 @@ function initializeNavigation(documentRoot) {
   const navigationItems = [...documentRoot.querySelectorAll("[data-route]")];
   if (!contentElement || !titleElement) return null;
   const render = routeName => activateRoute(routeName, { contentElement, titleElement, navigationItems });
-  navigationItems.forEach(item => item.addEventListener("click", () => render(item.dataset.route)));
+  navigationItems.forEach(item => item.addEventListener("click", () => {
+    const routeName = item.dataset.route;
+    if (routeName !== state.route) requestNavigation({ kind: "route", value: routeName }, documentRoot, render);
+  }));
   render("books");
   return render;
 }
@@ -196,10 +235,34 @@ function refreshGlobalTaskStatus(documentRoot) {
   element.lastElementChild.textContent = active ? `${active.step ?? active.kind} · ${active.state}` : "No active tasks";
 }
 
+function refreshBrandFormState(documentRoot) {
+  const form = documentRoot.querySelector('[data-form="brand-settings"]');
+  if (!form) return;
+  const status = form.querySelector("[data-brand-save-status]");
+  const button = form.querySelector("[data-brand-save-button]");
+  const statusName = state.brandSaving ? "saving" : state.brandDirty ? "dirty" : "saved";
+  if (status) {
+    status.dataset.state = statusName;
+    status.textContent = state.brandSaving ? "Saving in background…" : state.brandDirty ? "Unsaved changes" : "All changes saved";
+  }
+  if (button) {
+    button.disabled = state.brandSaving || !state.brandDirty;
+    button.textContent = state.brandSaving ? "Saving…" : "Save brand";
+  }
+  form.querySelectorAll("input").forEach(input => { input.disabled = state.brandSaving; });
+}
+
+function showBrandSaveMessage(documentRoot, message) {
+  const element = documentRoot.querySelector("[data-brand-save-message]");
+  if (!element) return;
+  element.textContent = message ?? "";
+  element.classList.toggle("hidden", !message);
+}
+
 function initializeWorkspace(documentRoot, render) {
   const renderCurrentRoute = () => { render(state.route); refreshGlobalTaskStatus(documentRoot); };
   const applyTaskUpdate = snapshotChanged => {
-    if (shouldRenderForTaskUpdate(state.route, snapshotChanged)) render(state.route);
+    if (shouldRenderForTaskUpdate(state.route, snapshotChanged, state.brandDirty)) render(state.route);
     refreshGlobalTaskStatus(documentRoot);
   };
   const updateBrandSearch = createDebouncedAction(query => {
@@ -215,34 +278,101 @@ function initializeWorkspace(documentRoot, render) {
     if (response.ok) state.tasks = response.data ?? [];
     applyTaskUpdate(false);
   });
-  const pollTask = taskId => {
+  const pollTask = (taskId, onTerminal) => {
     state.client.send("task.get", { taskId }, response => {
-      if (!response.ok) return;
+      if (!response.ok) {
+        onTerminal?.({ state: "Failed", errorMessage: response.error?.message ?? "Task status could not be read." });
+        return;
+      }
       const task = response.data.task;
       upsertTask(task);
       const snapshotChanged = Boolean(response.data.result);
       if (snapshotChanged) state.snapshot = response.data.result;
-      applyTaskUpdate(snapshotChanged);
       if (activeTaskStates.has(task.state)) {
-        state.pollTimers.set(taskId, globalThis.setTimeout(() => pollTask(taskId), 250));
+        applyTaskUpdate(false);
+        state.pollTimers.set(taskId, globalThis.setTimeout(() => pollTask(taskId, onTerminal), 250));
       } else {
         state.pollTimers.delete(taskId);
+        if (onTerminal) {
+          refreshGlobalTaskStatus(documentRoot);
+          onTerminal(task);
+        } else {
+          applyTaskUpdate(snapshotChanged);
+        }
         listTasks();
       }
     });
   };
-  const start = (type, payload) => state.client.send(type, payload, response => {
-    if (!response.ok) return;
+  const start = (type, payload, handlers = {}) => state.client.send(type, payload, response => {
+    if (!response.ok) {
+      handlers.onRejected?.(response.error);
+      return;
+    }
     upsertTask(response.data);
+    handlers.onStarted?.(response.data);
     applyTaskUpdate(false);
-    pollTask(response.data.taskId);
+    pollTask(response.data.taskId, handlers.onTerminal);
   });
+  const finishBrandSaveWithError = message => {
+    state.brandSaving = false;
+    state.pendingNavigation = null;
+    refreshBrandFormState(documentRoot);
+    showBrandSaveMessage(documentRoot, message || "Brand settings could not be saved.");
+  };
+  const saveBrandForm = form => {
+    if (state.brandSaving || !state.brandDirty) return;
+    const settings = brandSettingsValue(new FormData(form));
+    state.brandSaving = true;
+    showBrandSaveMessage(documentRoot, null);
+    refreshBrandFormState(documentRoot);
+    start("settings.brand.save", { brandId: form.dataset.brandId, settings }, {
+      onRejected: error => finishBrandSaveWithError(error?.message),
+      onTerminal: task => {
+        state.brandSaving = false;
+        if (task.state !== "Completed") {
+          finishBrandSaveWithError(task.errorMessage || `Brand save was ${String(task.state).toLocaleLowerCase()}.`);
+          return;
+        }
+
+        state.brandDirty = false;
+        state.brandBaseline = canonicalBrandSettings(settings);
+        const destination = state.pendingNavigation;
+        state.pendingNavigation = null;
+        if (destination) applyNavigation(destination, render);
+        else renderCurrentRoute();
+      }
+    });
+  };
 
   documentRoot.addEventListener("click", event => {
     const target = event.target.closest?.("[data-action]");
     if (!target) return;
     if (target.dataset.action === "select-book") { state.selectedBookId = target.dataset.bookId; renderCurrentRoute(); }
-    if (target.dataset.action === "select-brand") { state.selectedBrandId = target.dataset.brandId; renderCurrentRoute(); }
+    if (target.dataset.action === "select-brand" && target.dataset.brandId !== state.selectedBrandId) {
+      requestNavigation({ kind: "brand", value: target.dataset.brandId }, documentRoot, render);
+    }
+    if (target.dataset.action === "dirty-cancel") {
+      state.pendingNavigation = null;
+      documentRoot.querySelector("#unsaved-brand-dialog")?.close();
+    }
+    if (target.dataset.action === "dirty-discard") {
+      const destination = state.pendingNavigation;
+      state.pendingNavigation = null;
+      state.brandDirty = false;
+      documentRoot.querySelector("#unsaved-brand-dialog")?.close();
+      if (destination) applyNavigation(destination, render);
+    }
+    if (target.dataset.action === "dirty-save") {
+      const form = documentRoot.querySelector('[data-form="brand-settings"]');
+      const dialog = documentRoot.querySelector("#unsaved-brand-dialog");
+      if (!form?.reportValidity()) {
+        state.pendingNavigation = null;
+        dialog?.close();
+      } else {
+        dialog?.close();
+        saveBrandForm(form);
+      }
+    }
     if (target.dataset.action === "refresh") start("workspace.refresh");
     if (target.dataset.action === "list-tasks") listTasks();
     if (target.dataset.action === "generate") start("book.generate", { bookId: target.dataset.bookId, brandId: target.dataset.brandId });
@@ -250,7 +380,15 @@ function initializeWorkspace(documentRoot, render) {
   });
   documentRoot.addEventListener("input", event => {
     const target = event.target;
-    if (target.dataset?.action === "search-brands") updateBrandSearch(target.value);
+    if (target.dataset?.action === "search-brands") {
+      updateBrandSearch(target.value);
+      return;
+    }
+    const form = target.closest?.('[data-form="brand-settings"]');
+    if (!form || state.brandSaving) return;
+    state.brandDirty = hasBrandSettingsChanged(brandSettingsValue(new FormData(form)), state.brandBaseline);
+    showBrandSaveMessage(documentRoot, null);
+    refreshBrandFormState(documentRoot);
   });
   documentRoot.addEventListener("change", event => {
     const target = event.target;
@@ -263,7 +401,7 @@ function initializeWorkspace(documentRoot, render) {
     event.preventDefault();
     const data = new FormData(form);
     if (form.dataset.form === "global-settings") start("settings.global.save", { settings: globalSettingsValue(data) });
-    if (form.dataset.form === "brand-settings") start("settings.brand.save", { brandId: form.dataset.brandId, settings: brandSettingsValue(data) });
+    if (form.dataset.form === "brand-settings") saveBrandForm(form);
   });
   start("workspace.refresh");
   listTasks();
@@ -287,6 +425,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, brandSettingsValue, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, initializeNavigation, shouldRenderForTaskUpdate };
+const api = { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;
