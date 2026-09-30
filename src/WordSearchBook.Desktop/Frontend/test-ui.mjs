@@ -103,43 +103,66 @@ test("activates sidebar routes and renders their detail shell", () => {
 
 test("builds a typed global settings payload from form values", () => {
   const values = new Map([
-    ["board.width", "20"], ["board.height", "20"],
-    ["page.width", "2400"], ["page.height", "3000"]
+    ["board.width", "20"], ["board.height", "20"]
   ]);
 
   assert.deepEqual(globalSettingsValue(values), {
     board: { width: 20, height: 20 },
-    page: { width: 2400, height: 3000 }
+    page: { width: 2588, height: 3375 }
   });
 });
 
 test("builds a complete typed brand settings payload", () => {
   const values = new Map();
+  const addFont = (name, font) => {
+    values.set(`${name}.fontName`, font);
+    values.set(`${name}.fontSize`, "24.5");
+    values.set(`${name}.fontColor`, "#112233");
+  };
+  const addAnchor = (name, start, font, alignment) => {
+    values.set(`${name}.x`, String(start));
+    values.set(`${name}.y`, String(start + 1));
+    values.set(`${name}.alignment`, alignment);
+    addFont(name, font);
+  };
   const addRegion = (name, start, font) => {
     values.set(`${name}.x`, String(start));
     values.set(`${name}.y`, String(start + 1));
     values.set(`${name}.width`, String(start + 2));
     values.set(`${name}.height`, String(start + 3));
-    values.set(`${name}.fontName`, font);
-    values.set(`${name}.fontSize`, "24.5");
-    values.set(`${name}.fontColor`, "#112233");
+    addFont(name, font);
   };
-  addRegion("topic", 1, "Arial");
+  addAnchor("topic", 1, "Arial", "Center");
   addRegion("boardGame", 11, "Calibri");
-  addRegion("keywordList", 21, "Verdana");
-  addRegion("pageNumber", 31, "Tahoma");
+  [1, 2, 3, 4].forEach(index => {
+    values.set(`keywordList.column${index}X`, String(index * 100));
+    values.set(`keywordList.column${index}Y`, String(index * 100 + 1));
+  });
+  values.set("keywordList.stepY", "80");
+  values.set("keywordList.alignment", "Right");
+  addFont("keywordList", "Verdana");
+  addAnchor("pageNumber", 31, "Tahoma", "Left");
   values.set("answerLine.width", "2.5");
   values.set("answerLine.color", "#AABBCC");
 
   const settings = brandSettingsValue(values);
 
   assert.deepEqual(settings.topic, {
-    rectangle: { x: 1, y: 2, width: 3, height: 4 },
-    font: { name: "Arial", size: 24.5, color: "#112233" }
+    x: 1, y: 2,
+    font: { name: "Arial", size: 24.5, color: "#112233" },
+    alignment: "Center"
   });
   assert.deepEqual(settings.boardGame.rectangle, { x: 11, y: 12, width: 13, height: 14 });
-  assert.deepEqual(settings.keywordList.rectangle, { x: 21, y: 22, width: 23, height: 24 });
-  assert.deepEqual(settings.pageNumber.rectangle, { x: 31, y: 32, width: 33, height: 34 });
+  assert.deepEqual(settings.keywordList.columns, [
+    { x: 100, y: 101 }, { x: 200, y: 201 }, { x: 300, y: 301 }, { x: 400, y: 401 }
+  ]);
+  assert.equal(settings.keywordList.stepY, 80);
+  assert.equal(settings.keywordList.alignment, "Right");
+  assert.deepEqual(settings.pageNumber, {
+    x: 31, y: 32,
+    font: { name: "Tahoma", size: 24.5, color: "#112233" },
+    alignment: "Left"
+  });
   assert.deepEqual(settings.answerLine, { width: 2.5, color: "#AABBCC" });
 });
 

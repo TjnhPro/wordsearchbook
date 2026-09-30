@@ -14,6 +14,11 @@
 - Keep the search box fixed above the Brand List. The list owns its vertical scrollbar and must not increase the page height.
 - Filter brand names case-insensitively after a `250ms` debounce. Update only the list rows; never replace the complete route while the user is typing.
 - Arrange Topic, Board game, Keyword list, and Page number editors in a `2x2` grid. Keep Answer styling in a collapsed advanced section.
+- Show the output page as fixed `2588x3375`; do not expose editable page width or height controls.
+- Each brand owns `brands/{brand}/page_layout.png`. It must be a PNG exactly `2588x3375`; Create Brand also creates a white default layout.
+- Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
+- Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.
+- Keyword list exposes four independent X/Y anchors and one shared vertical step. The 20 keywords fill column-major with five rows per column; alignment applies to every keyword.
 - Brand Detail may scroll independently when needed. Keep its brand name, save state, and Save button visible.
 - Do not redraw a dirty Brand Detail during task polling. Save through the background queue and retain the draft when saving fails.
 - Before changing brand or leaving the Brands route with unsaved edits, require an explicit Save, Discard, or Cancel choice.

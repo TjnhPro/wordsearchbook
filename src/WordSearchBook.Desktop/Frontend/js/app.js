@@ -1,9 +1,10 @@
 const routeDefinitions = {
-  books: { title: "Books", heading: "Word-search books", copy: "Inspect input, choose a brand, and generate board caches." },
+  books: { title: "Books", heading: "Word-search books", copy: "Inspect input, choose a brand, and generate complete page caches." },
   brands: { title: "Brands", heading: "Brand layouts", copy: "Review and edit the layout settings for an existing brand." },
   tasks: { title: "Tasks", heading: "Background tasks", copy: "Queued and running work stays isolated from the desktop UI thread." },
-  settings: { title: "Settings", heading: "Workspace settings", copy: "Review and edit global board and page settings." }
+  settings: { title: "Settings", heading: "Workspace settings", copy: "Review the fixed output format and edit global board settings." }
 };
+const fixedPageSize = { width: 2588, height: 3375 };
 const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
 const state = {
   route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null,
@@ -82,7 +83,7 @@ function renderBooks() {
   const cached = (selected.cachedBrandIds ?? []).length ? selected.cachedBrandIds.map(id => badge(`Cached: ${id}`, "good")).join("") : badge("Not generated");
   const list = books.map(book => `<button class="book-row ${book.id === selected.id ? "book-row-active" : ""}" data-action="select-book" data-book-id="${escapeHtml(book.id)}"><span><strong>${escapeHtml(book.id)}</strong><small>${book.issue ? "Input needs attention" : `${book.topicCount} topic${book.topicCount === 1 ? "" : "s"}`}</small></span>${book.issue ? badge("Invalid", "bad") : badge("Ready", "good")}</button>`).join("");
 
-  return `<div class="master-detail"><section class="panel list-panel"><div class="panel-header"><div><h3>Books</h3><p>${books.length} discovered</p></div><button class="button-secondary" data-action="refresh">Refresh</button></div><div class="book-list">${list}</div></section><section class="panel detail-panel"><div class="detail-heading"><div><p class="eyebrow">Selected book</p><h3>${escapeHtml(selected.id)}</h3></div>${selected.issue ? badge("Invalid input", "bad") : badge("Ready", "good")}</div>${issueMarkup(selected.issue)}<dl class="summary-grid"><div><dt>Topics</dt><dd>${selected.topicCount}</dd></div><div><dt>Cache</dt><dd class="badge-row">${cached}</dd></div></dl><label class="field"><span>Brand</span><select data-action="assign-brand" data-book-id="${escapeHtml(selected.id)}" ${selected.issue ? "disabled" : ""}>${options}</select></label><div class="action-row"><button class="button-primary" data-action="generate" data-book-id="${escapeHtml(selected.id)}" data-brand-id="${escapeHtml(selectedBrand)}" ${selected.issue || !selectedBrand || generationActive ? "disabled" : ""}>${generationActive ? "Generating…" : "Generate boards"}</button></div><div class="preview-placeholder"><strong>Preview</strong><p>Puzzle and answer preview will be designed in a later UI phase.</p></div></section></div>`;
+  return `<div class="master-detail"><section class="panel list-panel"><div class="panel-header"><div><h3>Books</h3><p>${books.length} discovered</p></div><button class="button-secondary" data-action="refresh">Refresh</button></div><div class="book-list">${list}</div></section><section class="panel detail-panel"><div class="detail-heading"><div><p class="eyebrow">Selected book</p><h3>${escapeHtml(selected.id)}</h3></div>${selected.issue ? badge("Invalid input", "bad") : badge("Ready", "good")}</div>${issueMarkup(selected.issue)}<dl class="summary-grid"><div><dt>Topics</dt><dd>${selected.topicCount}</dd></div><div><dt>Cache</dt><dd class="badge-row">${cached}</dd></div></dl><label class="field"><span>Brand</span><select data-action="assign-brand" data-book-id="${escapeHtml(selected.id)}" ${selected.issue ? "disabled" : ""}>${options}</select></label><div class="action-row"><button class="button-primary" data-action="generate" data-book-id="${escapeHtml(selected.id)}" data-brand-id="${escapeHtml(selectedBrand)}" ${selected.issue || !selectedBrand || generationActive ? "disabled" : ""}>${generationActive ? "Generating…" : "Generate pages"}</button></div><div class="preview-placeholder"><strong>Preview</strong><p>Puzzle and answer page preview will be designed in a later UI phase.</p></div></section></div>`;
 }
 
 function renderTasks() {
@@ -99,10 +100,27 @@ function settingInput(name, label, value, type = "number", extra = "") {
   return `<label class="setting-field"><span>${label}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" ${extra} required></label>`;
 }
 
-function regionEditor(name, label, region) {
+function alignmentInput(name, value) {
+  const options = ["Left", "Center", "Right"].map(option => `<option value="${option}" ${option === value ? "selected" : ""}>${option}</option>`).join("");
+  return `<label class="setting-field"><span>Alignment</span><select name="${name}" required>${options}</select></label>`;
+}
+
+function fontInputs(name, font) {
+  return `${settingInput(`${name}.fontName`, "Font", font.name, "text")}${settingInput(`${name}.fontSize`, "Font size", font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput(`${name}.fontColor`, "Font color", font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}`;
+}
+
+function rectangleRegionEditor(name, label, region) {
   const rectangle = region.rectangle;
-  const font = region.font;
-  return `<fieldset class="settings-group brand-region-card"><legend>${label}</legend><div class="brand-region-fields">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${settingInput(`${name}.fontName`, "Font", font.name, "text")}${settingInput(`${name}.fontSize`, "Font size", font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput(`${name}.fontColor`, "Font color", font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset>`;
+  return `<fieldset class="settings-group brand-region-card"><legend>${label}</legend><div class="brand-region-fields">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${fontInputs(name, region.font)}</div></fieldset>`;
+}
+
+function anchoredTextEditor(name, label, region) {
+  return `<fieldset class="settings-group brand-region-card"><legend>${label}</legend><div class="brand-region-fields">${settingInput(`${name}.x`, "Anchor X", region.x)}${settingInput(`${name}.y`, "Top Y", region.y)}${alignmentInput(`${name}.alignment`, region.alignment)}${fontInputs(name, region.font)}</div></fieldset>`;
+}
+
+function keywordListEditor(region) {
+  const anchors = region.columns.map((column, index) => `${settingInput(`keywordList.column${index + 1}X`, `Column ${index + 1} X`, column.x)}${settingInput(`keywordList.column${index + 1}Y`, `Column ${index + 1} Y`, column.y)}`).join("");
+  return `<fieldset class="settings-group brand-region-card"><legend>Keyword list</legend><p class="brand-region-help">20 keywords fill top-to-bottom: 5 words per column.</p><div class="brand-region-fields">${anchors}${settingInput("keywordList.stepY", "Vertical step", region.stepY, "number", "min=\"1\"")}${alignmentInput("keywordList.alignment", region.alignment)}${fontInputs("keywordList", region.font)}</div></fieldset>`;
 }
 
 function brandRowsMarkup(brands, selectedBrandId) {
@@ -130,7 +148,7 @@ function renderBrands() {
     return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Invalid", "bad")}</div><div class="brand-detail-scroll">${issueMarkup(selected.issue)}</div></section></div>`;
   }
   const settings = selected.settings;
-  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="saved">All changes saved</span><button class="button-primary" data-brand-save-button type="submit" disabled>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${regionEditor("topic", "Topic", settings.topic)}${regionEditor("boardGame", "Board game", settings.boardGame)}${regionEditor("keywordList", "Keyword list", settings.keywordList)}${regionEditor("pageNumber", "Page number", settings.pageNumber)}</div><details class="answer-styling"><summary>Answer styling</summary><div class="settings-grid mt-5">${settingInput("answerLine.width", "Line width", settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Line color", settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></details></div></form>`;
+  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="saved">All changes saved</span><button class="button-primary" data-brand-save-button type="submit" disabled>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><p class="page-layout-note"><strong>page_layout.png</strong> must be a 2588 × 3375 PNG in this brand folder.</p><div class="brand-region-grid">${anchoredTextEditor("topic", "Topic", settings.topic)}${rectangleRegionEditor("boardGame", "Board game", settings.boardGame)}${keywordListEditor(settings.keywordList)}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}</div><details class="answer-styling"><summary>Answer styling</summary><div class="settings-grid mt-5">${settingInput("answerLine.width", "Line width", settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Line color", settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></details></div></form>`;
   return `<div class="brand-workspace">${list}${detail}</div>`;
 }
 
@@ -138,7 +156,7 @@ function renderSettings() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading settings…</p></div>`;
   const global = state.snapshot.globalSettings;
   if (!global) return `<section class="panel">${issueMarkup(state.snapshot.globalSettingsIssue)}</section>`;
-  const globalForm = `<form class="panel settings-form" data-form="global-settings"><div class="panel-header"><div><h3>Global settings</h3><p>Board and output page</p></div><button class="button-primary" type="submit">Save global</button></div><div class="settings-grid mt-5">${settingInput("board.width", "Board width", global.board.width, "number", "min=\"1\"")}${settingInput("board.height", "Board height", global.board.height, "number", "min=\"1\"")}${settingInput("page.width", "Page width", global.page.width, "number", "min=\"1\"")}${settingInput("page.height", "Page height", global.page.height, "number", "min=\"1\"")}</div></form>`;
+  const globalForm = `<form class="panel settings-form" data-form="global-settings"><div class="panel-header"><div><h3>Global settings</h3><p>Board and fixed output page</p></div><button class="button-primary" type="submit">Save global</button></div><div class="fixed-page-card"><span>Output page</span><strong>${global.page.width} × ${global.page.height} px</strong><p>Fixed for page_layout.png compatibility.</p></div><div class="settings-grid mt-5">${settingInput("board.width", "Board width", global.board.width, "number", "min=\"1\"")}${settingInput("board.height", "Board height", global.board.height, "number", "min=\"1\"")}</div></form>`;
   return `<div class="settings-stack">${globalForm}</div>`;
 }
 
@@ -149,11 +167,26 @@ function regionValue(data, name) {
     font: { name: String(data.get(`${name}.fontName`) ?? ""), size: numberValue(data, `${name}.fontSize`), color: String(data.get(`${name}.fontColor`) ?? "") }
   };
 }
+function anchoredTextValue(data, name) {
+  return {
+    x: numberValue(data, `${name}.x`), y: numberValue(data, `${name}.y`),
+    font: { name: String(data.get(`${name}.fontName`) ?? ""), size: numberValue(data, `${name}.fontSize`), color: String(data.get(`${name}.fontColor`) ?? "") },
+    alignment: String(data.get(`${name}.alignment`) ?? "")
+  };
+}
+function keywordListValue(data) {
+  return {
+    columns: [1, 2, 3, 4].map(index => ({ x: numberValue(data, `keywordList.column${index}X`), y: numberValue(data, `keywordList.column${index}Y`) })),
+    stepY: numberValue(data, "keywordList.stepY"),
+    font: { name: String(data.get("keywordList.fontName") ?? ""), size: numberValue(data, "keywordList.fontSize"), color: String(data.get("keywordList.fontColor") ?? "") },
+    alignment: String(data.get("keywordList.alignment") ?? "")
+  };
+}
 function globalSettingsValue(data) {
-  return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: { width: numberValue(data, "page.width"), height: numberValue(data, "page.height") } };
+  return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: fixedPageSize };
 }
 function brandSettingsValue(data) {
-  return { topic: regionValue(data, "topic"), boardGame: regionValue(data, "boardGame"), keywordList: regionValue(data, "keywordList"), pageNumber: regionValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
+  return { topic: anchoredTextValue(data, "topic"), boardGame: regionValue(data, "boardGame"), keywordList: keywordListValue(data), pageNumber: anchoredTextValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
 }
 
 function routeMarkup(routeName) {

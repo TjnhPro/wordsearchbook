@@ -44,7 +44,9 @@ Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tê
 
 Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
 
-`IWordSearchBookGenerationService` hiện chỉ sinh hai PNG board cho mỗi Topic và publish atomically vào. Topic, keyword list và page number sẽ được draw ở phase sau.
+`IWordSearchBookGenerationService` sinh board puzzle/answer, sau đó compose hai trang hoàn chỉnh từ `brands/{brand}/page_layout.png`. Layout bắt buộc là PNG `2588x3375`; thiếu file, sai kích thước hoặc không đọc được sẽ làm generation fail với error code ổn định thay vì dùng fallback.
+
+Topic, Keyword và Word Search Key được chuẩn hóa thành chữ hoa khi đọc CSV. Topic dùng anchor X/Y; page number dùng số thứ tự Topic bắt đầu từ 1; keyword list dùng đúng 20 Keyword hiển thị theo column-major, 5 từ cho mỗi cột trong 4 cột. Mỗi text region hỗ trợ `Left`, `Center`, `Right`; X là anchor theo alignment và Y luôn là cạnh trên. Text vượt trang hoặc chạm keyword khác sẽ fail bằng `page_text_overflow`.
 
 ```text
 input/{book}/.workspace/cache/{brand}/
@@ -52,14 +54,18 @@ input/{book}/.workspace/cache/{brand}/
 └─ topics/
    └─ 001/
       ├─ board-game.png
-      └─ board-game-answer.png
+      ├─ board-game-answer.png
+      ├─ page.png
+      └─ page-answer.png
 ```
 
 Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách nhiệm CSV/JSON, System.Drawing và filesystem cache. Desktop gọi workflow này thông qua background task queue.
 
 ## Desktop workspace
 
-Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page `2400x3000`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Brands tạo brand mặc định, tìm kiếm và chỉnh layout; Tasks hiển thị queue; Settings chỉnh global settings bằng atomic save.
+Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Brands tạo brand mặc định kèm layout trắng, tìm kiếm và chỉnh anchor/style; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
+
+Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Migration chỉ diễn ra trong memory; lần Save Brand tiếp theo ghi schema canonical gồm text anchor/alignment và bốn keyword column anchors.
 
 Quy ước kích thước và bố cục Desktop được ghi tại [Desktop UI guidelines](docs/ui-guidelines.md). UI dùng baseline `1600x900`; `MainWindow` có kích thước khởi tạo và tối thiểu `1610x910` để chừa khoảng trống quanh nội dung.
 

@@ -4,6 +4,7 @@ using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Desktop.BackgroundTasks;
 using WordSearchBook.Infrastructure.DependencyInjection;
+using WordSearchBook.Infrastructure.WordSearch.Settings;
 
 namespace WordSearchBook.Desktop.Tests.BackgroundTasks;
 
@@ -12,7 +13,7 @@ public sealed class WorkspaceTaskIntegrationTests
     [Fact]
     public async Task EnqueuedBrandCreateWritesDefaultsAndReturnsFreshWorkspaceSnapshot()
     {
-        var root = CopyFixtureToTemporaryRoot();
+        var root = await CopyFixtureToTemporaryRootAsync();
         try
         {
             var services = new ServiceCollection();
@@ -34,6 +35,7 @@ public sealed class WorkspaceTaskIntegrationTests
             var brand = Assert.Single(snapshot!.Brands, candidate => candidate.Id == "new-brand");
             Assert.Equal(2000, brand.Settings!.BoardGame.Rectangle.Width);
             Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "settings.json")));
+            Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "page_layout.png")));
         }
         finally
         {
@@ -44,7 +46,7 @@ public sealed class WorkspaceTaskIntegrationTests
     [Fact]
     public async Task EnqueuedGenerationProducesCacheAndReturnsFreshWorkspaceSnapshot()
     {
-        var root = CopyFixtureToTemporaryRoot();
+        var root = await CopyFixtureToTemporaryRootAsync();
         try
         {
             var services = new ServiceCollection();
@@ -73,7 +75,7 @@ public sealed class WorkspaceTaskIntegrationTests
         }
     }
 
-    private static string CopyFixtureToTemporaryRoot()
+    private static async Task<string> CopyFixtureToTemporaryRootAsync()
     {
         var source = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");
         var destination = Path.Combine(Path.GetTempPath(), $"word-search-task-{Guid.NewGuid():N}");
@@ -84,6 +86,15 @@ public sealed class WorkspaceTaskIntegrationTests
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target);
         }
+
+        const string layoutTemplateBrand = "layout-template";
+        await new JsonWordSearchSettingsWriter(new JsonWordSearchSettingsReader())
+            .CreateBrandAsync(destination, layoutTemplateBrand);
+        var templateDirectory = Path.Combine(destination, "brands", layoutTemplateBrand);
+        File.Move(
+            Path.Combine(templateDirectory, "page_layout.png"),
+            Path.Combine(destination, "brands", "demo", "page_layout.png"));
+        Directory.Delete(templateDirectory, recursive: true);
 
         return destination;
     }
