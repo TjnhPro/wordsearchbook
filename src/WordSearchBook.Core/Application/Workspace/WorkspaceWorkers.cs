@@ -155,3 +155,25 @@ public sealed class BrandPageLayoutValidationWorker(
         }
     }
 }
+
+public sealed class BrandPagePreviewWorker(IBrandPagePreviewService previewService)
+    : BackgroundTaskWorker<BrandPagePreviewTaskRequest, BrandPagePreviewResult>
+{
+    public override BackgroundTaskKind Kind => BackgroundTaskKind.BrandPagePreview;
+
+    protected override async ValueTask<BrandPagePreviewResult> ExecuteTypedAsync(
+        BrandPagePreviewTaskRequest request,
+        IBackgroundTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            context.Report("Drawing page preview", subject: request.BrandId);
+            return await previewService.DrawAsync(request.RootPath, request.BrandId, cancellationToken);
+        }
+        catch (WordSearchGenerationException exception)
+        {
+            throw new BackgroundTaskFailureException(exception.Code, exception.Message);
+        }
+    }
+}

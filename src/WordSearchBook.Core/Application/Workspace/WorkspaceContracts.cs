@@ -1,4 +1,5 @@
 using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Core.Application.Workspace;
@@ -39,6 +40,8 @@ public sealed record BrandPageLayoutValidationRequest(string RootPath, string Br
 public sealed record BrandPageLayoutValidationTaskResult(
     WorkspaceSnapshot Snapshot,
     BrandValidationResult Validation);
+
+public sealed record BrandPagePreviewTaskRequest(string RootPath, string BrandId);
 
 public abstract record SettingsSaveTaskRequest(string RootPath);
 

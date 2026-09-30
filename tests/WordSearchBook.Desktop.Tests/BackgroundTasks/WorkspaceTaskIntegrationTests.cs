@@ -84,6 +84,38 @@ public sealed class WorkspaceTaskIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task EnqueuedBrandPagePreviewPublishesResultBesideLayout()
+    {
+        var root = await CopyFixtureToTemporaryRootAsync();
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddWordSearchBookInfrastructure();
+            using var provider = services.BuildServiceProvider();
+            using var manager = new BackgroundTaskManager(provider);
+
+            var task = await manager.StartAsync(
+                BackgroundTaskKind.BrandPagePreview,
+                "brand-preview:demo",
+                "demo",
+                new BrandPagePreviewTaskRequest(root, "demo"));
+
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(15)));
+            var completed = await manager.GetAsync(task.TaskId);
+            Assert.Equal(BackgroundTaskState.Completed, completed!.State);
+            Assert.True(manager.TryGetResult<WordSearchBook.Core.WordSearch.Application.BrandPagePreviewResult>(
+                task.TaskId,
+                out var result));
+            Assert.Equal("page_layout.preview.png", result!.FileName);
+            Assert.True(File.Exists(Path.Combine(root, "brands", "demo", result.FileName)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static async Task<string> CopyFixtureToTemporaryRootAsync()
     {
         var source = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");
