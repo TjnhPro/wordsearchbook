@@ -1,10 +1,11 @@
 const routeDefinitions = {
   books: { title: "Books", heading: "Word-search books", copy: "Inspect input, choose a brand, and generate board caches." },
+  brands: { title: "Brands", heading: "Brand layouts", copy: "Review and edit the layout settings for an existing brand." },
   tasks: { title: "Tasks", heading: "Background tasks", copy: "Queued and running work stays isolated from the desktop UI thread." },
-  settings: { title: "Settings", heading: "Workspace settings", copy: "Review and edit global and brand layout settings." }
+  settings: { title: "Settings", heading: "Workspace settings", copy: "Review and edit global board and page settings." }
 };
 const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
-const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedSettingsBrandId: null, client: null, pollTimers: new Map() };
+const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null, client: null, pollTimers: new Map() };
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]);
@@ -49,21 +50,33 @@ function settingInput(name, label, value, type = "number", extra = "") {
 function regionEditor(name, label, region) {
   const rectangle = region.rectangle;
   const font = region.font;
-  return `<fieldset class="settings-group"><legend>${label}</legend><div class="settings-grid">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${settingInput(`${name}.fontName`, "Font", font.name, "text")}${settingInput(`${name}.fontSize`, "Font size", font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput(`${name}.fontColor`, "Font color", font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset>`;
+  return `<fieldset class="settings-group brand-region-card"><legend>${label}</legend><div class="brand-region-fields">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${settingInput(`${name}.fontName`, "Font", font.name, "text")}${settingInput(`${name}.fontSize`, "Font size", font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput(`${name}.fontColor`, "Font color", font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset>`;
+}
+
+function renderBrands() {
+  if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading brands…</p></div>`;
+  const brands = state.snapshot.brands ?? [];
+  if (!brands.length) return `<div class="empty-panel"><p class="empty-panel-title">No brands found</p><p class="empty-panel-copy">Add brands/{brand}/settings.json below the application root and refresh the workspace.</p></div>`;
+  if (!brands.some(brand => brand.id === state.selectedBrandId)) {
+    state.selectedBrandId = brands.find(brand => brand.settings)?.id ?? brands[0].id;
+  }
+  const selected = brands.find(brand => brand.id === state.selectedBrandId);
+  const rows = brands.map(brand => `<button class="brand-row ${brand.id === selected.id ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-id="${escapeHtml(brand.id)}"><span><strong>${escapeHtml(brand.id)}</strong><small>${brand.settings ? "Layout available" : "Settings need attention"}</small></span>${brand.settings ? badge("Ready", "good") : badge("Invalid", "bad")}</button>`).join("");
+  const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p>${brands.length} discovered</p></div></div><div class="brand-list-scroll">${rows}</div></section>`;
+  if (!selected.settings) {
+    return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Invalid", "bad")}</div><div class="brand-detail-scroll">${issueMarkup(selected.issue)}</div></section></div>`;
+  }
+  const settings = selected.settings;
+  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><button class="button-primary" type="submit">Save brand</button></div><div class="brand-detail-scroll"><div class="brand-region-grid">${regionEditor("topic", "Topic", settings.topic)}${regionEditor("boardGame", "Board game", settings.boardGame)}${regionEditor("keywordList", "Keyword list", settings.keywordList)}${regionEditor("pageNumber", "Page number", settings.pageNumber)}</div><details class="answer-styling"><summary>Answer styling</summary><div class="settings-grid mt-5">${settingInput("answerLine.width", "Line width", settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Line color", settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></details></div></form>`;
+  return `<div class="brand-workspace">${list}${detail}</div>`;
 }
 
 function renderSettings() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading settings…</p></div>`;
   const global = state.snapshot.globalSettings;
-  const brands = state.snapshot.brands ?? [];
   if (!global) return `<section class="panel">${issueMarkup(state.snapshot.globalSettingsIssue)}</section>`;
-  const editableBrands = brands.filter(brand => brand.settings);
-  if (!editableBrands.some(brand => brand.id === state.selectedSettingsBrandId)) state.selectedSettingsBrandId = editableBrands[0]?.id ?? null;
-  const selected = editableBrands.find(brand => brand.id === state.selectedSettingsBrandId);
-  const brandOptions = editableBrands.map(brand => `<option value="${escapeHtml(brand.id)}" ${brand.id === state.selectedSettingsBrandId ? "selected" : ""}>${escapeHtml(brand.id)}</option>`).join("");
   const globalForm = `<form class="panel settings-form" data-form="global-settings"><div class="panel-header"><div><h3>Global settings</h3><p>Board and output page</p></div><button class="button-primary" type="submit">Save global</button></div><div class="settings-grid mt-5">${settingInput("board.width", "Board width", global.board.width, "number", "min=\"1\"")}${settingInput("board.height", "Board height", global.board.height, "number", "min=\"1\"")}${settingInput("page.width", "Page width", global.page.width, "number", "min=\"1\"")}${settingInput("page.height", "Page height", global.page.height, "number", "min=\"1\"")}</div></form>`;
-  const brandForm = selected ? `<form class="panel settings-form" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="panel-header"><div><h3>Brand layout</h3><p>Edit an existing brand only</p></div><div class="settings-actions"><select data-action="select-settings-brand">${brandOptions}</select><button class="button-primary" type="submit">Save brand</button></div></div>${regionEditor("topic", "Topic", selected.settings.topic)}${regionEditor("boardGame", "Board game", selected.settings.boardGame)}${regionEditor("keywordList", "Keyword list", selected.settings.keywordList)}${regionEditor("pageNumber", "Page number", selected.settings.pageNumber)}<fieldset class="settings-group"><legend>Answer line</legend><div class="settings-grid">${settingInput("answerLine.width", "Width", selected.settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Color", selected.settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset></form>` : `<section class="panel"><p class="empty-panel-copy">No valid existing brand is available to edit.</p></section>`;
-  return `<div class="settings-stack">${globalForm}${brandForm}</div>`;
+  return `<div class="settings-stack">${globalForm}</div>`;
 }
 
 function numberValue(data, name) { return Number(data.get(name)); }
@@ -82,8 +95,8 @@ function brandSettingsValue(data) {
 
 function routeMarkup(routeName) {
   const route = routeDefinitions[routeName];
-  const body = routeName === "books" ? renderBooks() : routeName === "tasks" ? renderTasks() : renderSettings();
-  return `<section><h2 class="page-heading">${route.heading}</h2><p class="page-copy">${route.copy}</p><div class="route-body">${body}</div></section>`;
+  const body = routeName === "books" ? renderBooks() : routeName === "brands" ? renderBrands() : routeName === "tasks" ? renderTasks() : renderSettings();
+  return `<section class="route-page ${routeName === "brands" ? "route-page-fill" : ""}"><h2 class="page-heading">${route.heading}</h2><p class="page-copy">${route.copy}</p><div class="route-body">${body}</div></section>`;
 }
 
 function activateRoute(routeName, { contentElement, titleElement, navigationItems = [] }) {
@@ -197,6 +210,7 @@ function initializeWorkspace(documentRoot, render) {
     const target = event.target.closest?.("[data-action]");
     if (!target) return;
     if (target.dataset.action === "select-book") { state.selectedBookId = target.dataset.bookId; applyAndRender(); }
+    if (target.dataset.action === "select-brand") { state.selectedBrandId = target.dataset.brandId; applyAndRender(); }
     if (target.dataset.action === "refresh") start("workspace.refresh");
     if (target.dataset.action === "list-tasks") listTasks();
     if (target.dataset.action === "generate") start("book.generate", { bookId: target.dataset.bookId, brandId: target.dataset.brandId });
@@ -204,7 +218,6 @@ function initializeWorkspace(documentRoot, render) {
   });
   documentRoot.addEventListener("change", event => {
     const target = event.target;
-    if (target.dataset?.action === "select-settings-brand") { state.selectedSettingsBrandId = target.value; applyAndRender(); return; }
     if (target.dataset?.action !== "assign-brand" || !target.value) return;
     start("book.brand.assign", { bookId: target.dataset.bookId, brandId: target.value });
   });

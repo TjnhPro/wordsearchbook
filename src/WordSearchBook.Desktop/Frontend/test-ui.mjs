@@ -85,7 +85,7 @@ test("renders invalid serialized responses without throwing", () => {
 });
 
 test("activates sidebar routes and renders their detail shell", () => {
-  const navigationItems = ["books", "tasks", "settings"].map(route => ({
+  const navigationItems = ["books", "brands", "tasks", "settings"].map(route => ({
     dataset: { route }, active: false,
     classList: { owner: null, toggle(_name, active) { this.owner.active = active; } }
   }));
@@ -98,7 +98,7 @@ test("activates sidebar routes and renders their detail shell", () => {
   assert.equal(route, "tasks");
   assert.equal(titleElement.textContent, "Tasks");
   assert.match(contentElement.innerHTML, /Background tasks/);
-  assert.deepEqual(navigationItems.map(item => item.active), [false, true, false]);
+  assert.deepEqual(navigationItems.map(item => item.active), [false, false, true, false]);
 });
 
 test("builds a typed global settings payload from form values", () => {
