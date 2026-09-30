@@ -13,7 +13,8 @@
 - Use a `3/9` master-detail grid: Brand List takes 25% on the left and Brand Detail takes 75% on the right.
 - Keep the search box fixed above the Brand List. The list owns its vertical scrollbar and must not increase the page height.
 - Filter brand names case-insensitively after a `250ms` debounce. Update only the list rows; never replace the complete route while the user is typing.
-- Arrange Topic, Board game, Keyword list, and Page number editors in a `2x2` grid. Keep Answer styling in a collapsed advanced section.
+- Use one two-column panel grid in this order: Page layout/Page layout preview, Topic/Page number, then Keyword list/Board game. Keep every panel background white.
+- Keep Answer styling inside the Board game panel below its placement and font settings.
 - Show the output page as fixed `2588x3375`; do not expose editable page width or height controls.
 - Each brand owns `brands/{brand}/page_layout.png`. It must be a PNG exactly `2588x3375`; Create Brand also creates a white default layout.
 - Creating a valid default PNG does not certify it. Show `Not validated`, `Validated`, or `Needs validation` separately from settings health.
