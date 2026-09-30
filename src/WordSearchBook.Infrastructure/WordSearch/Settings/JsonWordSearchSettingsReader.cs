@@ -9,12 +9,13 @@ namespace WordSearchBook.Infrastructure.WordSearch.Settings;
 
 public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsReader
 {
-    private const int SupportedBoardWidth = 20;
-    private const int SupportedBoardHeight = 20;
+    private const int SupportedBoardWidth = WordSearchSettingsDefaults.BoardWidth;
+    private const int SupportedBoardHeight = WordSearchSettingsDefaults.BoardHeight;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        WriteIndented = true
     };
 
     public async Task<WordSearchSettingsBundle> ReadAsync(
@@ -32,9 +33,9 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-        var global = await ReadJsonAsync<GlobalWordSearchSettings>(
-            Path.Combine(rootPath, "settings.json"),
-            cancellationToken);
+        var path = Path.Combine(rootPath, "settings.json");
+        await EnsureDefaultGlobalSettingsAsync(path, cancellationToken);
+        var global = await ReadJsonAsync<GlobalWordSearchSettings>(path, cancellationToken);
         ValidateGlobal(global);
         return global;
     }
@@ -83,6 +84,56 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             throw new WordSearchGenerationException("settings_read_failed", $"Settings file could not be read: {path}", exception);
+        }
+    }
+
+    private static async Task EnsureDefaultGlobalSettingsAsync(string path, CancellationToken cancellationToken)
+    {
+        if (File.Exists(path))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(path)!;
+        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            await using (var stream = File.Create(temporaryPath))
+            {
+                await JsonSerializer.SerializeAsync(
+                    stream,
+                    WordSearchSettingsDefaults.CreateGlobal(),
+                    JsonOptions,
+                    cancellationToken);
+            }
+
+            try
+            {
+                File.Move(temporaryPath, path);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                // Another refresh created the same default file first.
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new WordSearchGenerationException(
+                "settings_create_failed",
+                $"Default settings file could not be created: {path}",
+                exception);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
         }
     }
 

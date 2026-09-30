@@ -6,6 +6,31 @@ namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 public sealed class JsonWordSearchSettingsReaderTests
 {
     [Fact]
+    public async Task CreatesDefaultGlobalSettingsWhenFileIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"word-search-settings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var settings = await new JsonWordSearchSettingsReader().ReadGlobalAsync(root);
+
+            Assert.Equal(20, settings.Board.Width);
+            Assert.Equal(20, settings.Board.Height);
+            Assert.Equal(2400, settings.Page.Width);
+            Assert.Equal(3000, settings.Page.Height);
+            var json = await File.ReadAllTextAsync(Path.Combine(root, "settings.json"));
+            Assert.Contains("\"board\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"page\"", json, StringComparison.Ordinal);
+            Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task LoadsValidGlobalAndBrandFixture()
     {
         var root = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");
@@ -80,7 +105,7 @@ public sealed class JsonWordSearchSettingsReaderTests
     }
 
     [Fact]
-    public async Task RejectsMissingSettingsFile()
+    public async Task RejectsMissingBrandSettingsFile()
     {
         var root = Path.Combine(Path.GetTempPath(), $"word-search-settings-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);

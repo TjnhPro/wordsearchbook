@@ -57,6 +57,32 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
     }
 
     [Fact]
+    public async Task CreatesDefaultGlobalSettingsWhenWorkspaceSettingsAreMissing()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            File.Delete(Path.Combine(root, "settings.json"));
+            var service = new WordSearchWorkspaceSnapshotService(
+                new CsvWordSearchInputReader(),
+                new JsonWordSearchSettingsReader(),
+                new StubAssignmentStore(new Dictionary<string, string>()));
+
+            var snapshot = await service.RefreshAsync(root);
+
+            Assert.NotNull(snapshot.GlobalSettings);
+            Assert.Null(snapshot.GlobalSettingsIssue);
+            Assert.Equal(20, snapshot.GlobalSettings.Board.Width);
+            Assert.Equal(2400, snapshot.GlobalSettings.Page.Width);
+            Assert.True(File.Exists(Path.Combine(root, "settings.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task AssignmentStorePersistsBookBrandMapping()
     {
         var root = Path.Combine(Path.GetTempPath(), $"word-search-state-{Guid.NewGuid():N}");

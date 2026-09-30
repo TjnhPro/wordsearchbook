@@ -14,6 +14,18 @@ public sealed record AnswerLineSettings(float Width, string Color);
 
 public sealed record GlobalWordSearchSettings(BoardSize Board, PageSize Page);
 
+public static class WordSearchSettingsDefaults
+{
+    public const int BoardWidth = 20;
+    public const int BoardHeight = 20;
+    public const int PageWidth = 2400;
+    public const int PageHeight = 3000;
+
+    public static GlobalWordSearchSettings CreateGlobal() => new(
+        new BoardSize(BoardWidth, BoardHeight),
+        new PageSize(PageWidth, PageHeight));
+}
+
 public sealed record BrandWordSearchSettings(
     TextRegionSettings Topic,
     TextRegionSettings BoardGame,
