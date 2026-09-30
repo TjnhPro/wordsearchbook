@@ -61,6 +61,8 @@ Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách
 
 Desktop dùng sidebar `Books`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page `2400x3000`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Tasks hiển thị queue; Settings chỉnh các JSON hiện có bằng atomic save.
 
+Quy ước kích thước và bố cục Desktop được ghi tại [Desktop UI guidelines](docs/ui-guidelines.md). UI dùng baseline `1600x900`; `MainWindow` có kích thước khởi tạo và tối thiểu `1610x910` để chừa khoảng trống quanh nội dung.
+
 Mọi thao tác đọc/ghi filesystem và generate đều chạy qua một background queue tuần tự. Khi đóng ứng dụng trong lúc task đang chạy, ứng dụng hỏi xác nhận, gửi cancellation và chờ tối đa năm giây.
 
 ## License
