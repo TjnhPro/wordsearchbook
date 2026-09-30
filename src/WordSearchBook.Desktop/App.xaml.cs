@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
+using WordSearchBook.Core.Application.BackgroundTasks;
+using WordSearchBook.Desktop.BackgroundTasks;
 using WordSearchBook.Desktop.Bridge;
 using WordSearchBook.Infrastructure.DependencyInjection;
 
@@ -15,6 +17,7 @@ public partial class App : Application
 
         var services = new ServiceCollection();
         services.AddWordSearchBookInfrastructure();
+        services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
         services.AddSingleton<WebViewBridgeRouter>();
         services.AddSingleton<MainWindow>();
 
