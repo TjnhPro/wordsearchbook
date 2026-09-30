@@ -7,11 +7,22 @@ using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.DependencyInjection;
+using WordSearchBook.Infrastructure.WordSearch.Processing;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 
 public sealed class BookProcessingServiceTests
 {
+    [Fact]
+    public void NaturalPageOrderingPlacesNumericTwoBeforeTen()
+    {
+        var ordered = new[] { "page-10.png", "Page-1.png", "page-2.png" }
+            .OrderBy(value => value, BookProcessingService.NaturalFileNameComparer.Instance)
+            .ToArray();
+
+        Assert.Equal(["Page-1.png", "page-2.png", "page-10.png"], ordered);
+    }
+
     [Fact]
     public async Task PublishesPuzzlePdfAndQuality85AnswerJpegsAtPrintDimensions()
     {
@@ -96,6 +107,14 @@ public sealed class BookProcessingServiceTests
                 new BookProcessingRequest(root, "sample-book", "demo"));
 
             Assert.False(File.Exists(Path.Combine(result.AnswerDirectory, "999.jpg")));
+            var publishedPdf = await File.ReadAllBytesAsync(result.PdfPath);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                services.GetRequiredService<IBookProcessingService>().ProcessAsync(
+                    new BookProcessingRequest(root, "sample-book", "demo"),
+                    cancellationToken: cancellation.Token));
+            Assert.Equal(publishedPdf, await File.ReadAllBytesAsync(result.PdfPath));
         }
         finally
         {

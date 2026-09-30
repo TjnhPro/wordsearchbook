@@ -60,7 +60,16 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
                 return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_brand_changed" };
             }
 
-            var settingsSignature = await CalculateSettingsSignatureAsync(rootPath, manifest.BrandId, cancellationToken);
+            string settingsSignature;
+            try
+            {
+                settingsSignature = await CalculateSettingsSignatureAsync(rootPath, manifest.BrandId, cancellationToken);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_settings_changed" };
+            }
+
             if (!string.Equals(settingsSignature, manifest.SettingsSignature, StringComparison.Ordinal))
             {
                 return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_settings_changed" };
@@ -80,6 +89,19 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
                 {
                     return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_answer_changed" };
                 }
+            }
+
+            var answerDirectory = Path.Combine(outputDirectory, "answer");
+            var expectedAnswers = manifest.Answers
+                .Select(answer => ResolveOutputPath(outputDirectory, answer.RelativePath))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var actualAnswers = Directory.Exists(answerDirectory)
+                ? Directory.EnumerateFiles(answerDirectory, "*", SearchOption.TopDirectoryOnly)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!expectedAnswers.SetEquals(actualAnswers))
+            {
+                return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_answer_changed" };
             }
 
             return summary;

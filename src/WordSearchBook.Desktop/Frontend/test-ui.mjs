@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -174,6 +174,27 @@ test("filters brands by a trimmed case-insensitive name fragment", () => {
   assert.equal(filterBrands(brands, "missing").length, 0);
 });
 
+test("filters books by folder name and renders certified status", () => {
+  const books = [
+    { id: "Animal-Puzzles", topicCount: 10, dataValidation: { status: "Validated" } },
+    { id: "Ocean-Life", topicCount: 8, dataValidation: { status: "NeedsValidation" } }
+  ];
+
+  assert.deepEqual(filterBooks(books, " ocean ").map(book => book.id), ["Ocean-Life"]);
+  const markup = bookRowsMarkup(books, "Animal-Puzzles");
+  assert.match(markup, /Animal-Puzzles/);
+  assert.match(markup, /Validated/);
+  assert.match(markup, /Needs validation/);
+  assert.match(markup, /book-row-active/);
+});
+
+test("maps CSV and output lifecycle states to stable badges", () => {
+  assert.deepEqual(bookDataValidationPresentation({ status: "Invalid" }), { label: "Invalid", tone: "bad" });
+  assert.deepEqual(bookDataValidationPresentation({ status: "Validated" }), { label: "Validated", tone: "good" });
+  assert.deepEqual(bookOutputPresentation({ status: "Ready" }), { label: "Ready", tone: "good" });
+  assert.deepEqual(bookOutputPresentation({ status: "Stale" }), { label: "Stale", tone: "warn" });
+});
+
 test("debounces brand search and applies only the latest query", () => {
   const scheduled = new Map();
   let nextId = 0;
@@ -200,6 +221,8 @@ test("does not redraw the Brands route for task-only polling updates", () => {
   assert.equal(shouldRenderForTaskUpdate("brands", true), true);
   assert.equal(shouldRenderForTaskUpdate("brands", true, true), false);
   assert.equal(shouldRenderForTaskUpdate("tasks", false), true);
+  assert.equal(shouldRenderForTaskUpdate("books", false), false);
+  assert.equal(shouldRenderForTaskUpdate("books", true), true);
 });
 
 test("detects a changed brand draft against its saved baseline", () => {

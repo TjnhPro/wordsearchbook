@@ -453,7 +453,7 @@ public sealed class BookProcessingService(
         PdfManifest Pdf,
         IReadOnlyList<BookAnswerOutput> Answers);
 
-    private sealed class NaturalFileNameComparer : IComparer<string?>
+    internal sealed class NaturalFileNameComparer : IComparer<string?>
     {
         public static NaturalFileNameComparer Instance { get; } = new();
 
