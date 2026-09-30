@@ -63,9 +63,19 @@ Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách
 
 ## Desktop workspace
 
-Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Brands tạo brand mặc định kèm layout trắng, tìm kiếm, chỉnh anchor/style và validate `page_layout.png` thủ công; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
+Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Brands tạo brand mặc định kèm layout trắng và hai folder optional `front/back`, tìm kiếm, chỉnh anchor/style và validation asset thủ công; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
 
-Mỗi brand lưu certificate tại `brands/{brand}/brand.validation.json`. Workspace startup chỉ so certificate với metadata `page_layout.png`; việc decode PNG và kiểm tra đúng `2588x3375` chỉ chạy qua nút **Validate layout** trong background queue. Generation bị chặn ở cả UI và Core cho đến khi trạng thái layout là `Validated`.
+```text
+brands/{brand}/
+├─ settings.json
+├─ page_layout.png
+├─ front/
+└─ back/
+```
+
+Mỗi brand lưu một certificate chung tại `brands/{brand}/brand.validation.json`. `page_layout.png` luôn bắt buộc; `front/back` là optional và folder thiếu hoặc rỗng được bỏ qua. Khi có ảnh trực tiếp trong hai folder, chỉ `.png`, `.jpg`, `.jpeg` được theo dõi và từng ảnh phải đọc được ở đúng `2588x3375`; file khác và thư mục con không tham gia validation hay fingerprint.
+
+Workspace startup chỉ liệt kê file, đọc metadata và so certificate; không decode ảnh. Kiểm tra format/dimensions chỉ chạy qua nút **Validate brand** trong background queue. Thêm, xóa, đổi tên hoặc thay đổi asset được theo dõi sẽ chuyển Brand sang `Needs validation`, và Generation bị chặn ở cả UI lẫn Core cho đến khi toàn Brand là `Validated`.
 
 Brand Detail cung cấp **Draw demo** để render một trang mẫu cố định bằng settings đã lưu vào `brands/{brand}/page_layout.preview.png`. Preview chạy trong background queue, không sửa `page_layout.png` hay certificate validation; **Open folder** mở trực tiếp thư mục brand để xem file kết quả ở kích thước đầy đủ.
 

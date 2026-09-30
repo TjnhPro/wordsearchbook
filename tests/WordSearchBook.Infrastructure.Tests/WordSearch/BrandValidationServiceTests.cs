@@ -71,7 +71,11 @@ public sealed class BrandValidationServiceTests
         var root = CreateRoot();
         try
         {
-            var record = CurrentRecord("ignored") with { SchemaVersion = 0 };
+            var record = CurrentRecord("ignored") with
+            {
+                SchemaVersion = 1,
+                AssetFingerprintFormatVersion = 1
+            };
             await new JsonBrandValidationStateStore().SaveAsync(root, "demo", record);
 
             var state = await CreateService().CheckStateAsync(root, "demo");
@@ -154,6 +158,69 @@ public sealed class BrandValidationServiceTests
             var failure = Assert.Single(result.Failures, item => item.Code == "brand_asset_dimensions_invalid");
             Assert.Equal("front/wrong.png", failure.Target);
             Assert.Equal(BrandValidationStatus.NotValidated, result.State.Status);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CorruptOptionalImageReturnsReadableFailureForItsRelativePath()
+    {
+        var root = CreateRoot();
+        try
+        {
+            SaveImage(LayoutPath(root), 2588, 3375, ImageFormat.Png);
+            var front = Path.Combine(root, "brands", "demo", "front");
+            Directory.CreateDirectory(front);
+            await File.WriteAllTextAsync(Path.Combine(front, "broken.jpg"), "not an image");
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            var failure = Assert.Single(result.Failures, item => item.Code == "brand_asset_invalid");
+            Assert.Equal("front/broken.jpg", failure.Target);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("delete")]
+    [InlineData("rename")]
+    [InlineData("modify")]
+    public async Task TrackedImageMetadataChangesInvalidateCertificateWithoutDecoding(string change)
+    {
+        var root = CreateRoot();
+        try
+        {
+            await File.WriteAllTextAsync(LayoutPath(root), "layout metadata");
+            var front = Path.Combine(root, "brands", "demo", "front");
+            Directory.CreateDirectory(front);
+            var imagePath = Path.Combine(front, "tracked.png");
+            await File.WriteAllTextAsync(imagePath, "image metadata");
+            var fingerprint = BrandValidationService.CaptureFingerprint(root, "demo");
+            var record = CurrentRecord(fingerprint) with
+            {
+                Assets =
+                [
+                    new BrandValidationAssetFact("page_layout.png", 2588, 3375),
+                    new BrandValidationAssetFact("front/tracked.png", 2588, 3375)
+                ]
+            };
+            await new JsonBrandValidationStateStore().SaveAsync(root, "demo", record);
+            var service = CreateService();
+            Assert.Equal(BrandValidationStatus.Validated, (await service.CheckStateAsync(root, "demo")).Status);
+
+            if (change == "delete") File.Delete(imagePath);
+            if (change == "rename") File.Move(imagePath, Path.Combine(front, "renamed.png"));
+            if (change == "modify") await File.AppendAllTextAsync(imagePath, " changed");
+
+            var state = await service.CheckStateAsync(root, "demo");
+            Assert.Equal(BrandValidationStatus.NeedsValidation, state.Status);
+            Assert.Equal("brand_fingerprint_changed", state.ReasonCode);
         }
         finally
         {

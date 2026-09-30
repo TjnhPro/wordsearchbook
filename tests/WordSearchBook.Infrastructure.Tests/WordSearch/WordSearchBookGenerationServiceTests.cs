@@ -18,7 +18,7 @@ public sealed class WordSearchBookGenerationServiceTests
         try
         {
             using var services = BuildServices();
-            await CertifyLayoutAsync(services, root);
+            await CertifyBrandAsync(services, root);
             var service = services.GetRequiredService<IWordSearchBookGenerationService>();
             var request = new WordSearchGenerationRequest(root, "sample-book", "demo");
 
@@ -73,7 +73,7 @@ public sealed class WordSearchBookGenerationServiceTests
         try
         {
             using var services = BuildServices();
-            await CertifyLayoutAsync(services, root);
+            await CertifyBrandAsync(services, root);
             var service = services.GetRequiredService<IWordSearchBookGenerationService>();
             var request = new WordSearchGenerationRequest(root, "sample-book", "demo");
             var successful = await service.GenerateAsync(request);
@@ -115,7 +115,7 @@ public sealed class WordSearchBookGenerationServiceTests
             await File.WriteAllLinesAsync(dataPath, [lines[0], .. lines.Skip(1), .. secondTopicRows]);
 
             using var services = BuildServices();
-            await CertifyLayoutAsync(services, root);
+            await CertifyBrandAsync(services, root);
             var result = await services.GetRequiredService<IWordSearchBookGenerationService>()
                 .GenerateAsync(new WordSearchGenerationRequest(root, "sample-book", "demo"));
 
@@ -181,7 +181,7 @@ public sealed class WordSearchBookGenerationServiceTests
         try
         {
             using var services = BuildServices();
-            await CertifyLayoutAsync(services, root);
+            await CertifyBrandAsync(services, root);
             await using (var stream = new FileStream(
                 Path.Combine(root, "brands", "demo", "page_layout.png"),
                 FileMode.Append,
@@ -211,7 +211,35 @@ public sealed class WordSearchBookGenerationServiceTests
         return services.BuildServiceProvider();
     }
 
-    private static async Task CertifyLayoutAsync(IServiceProvider services, string root)
+    [Fact]
+    public async Task RejectsGenerationWhenOptionalAssetIsAddedAfterCertification()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            using var services = BuildServices();
+            await CertifyBrandAsync(services, root);
+            var front = Path.Combine(root, "brands", "demo", "front");
+            Directory.CreateDirectory(front);
+            using (var image = new Bitmap(2588, 3375))
+            {
+                image.Save(Path.Combine(front, "opening.jpg"), ImageFormat.Jpeg);
+            }
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                services.GetRequiredService<IWordSearchBookGenerationService>().GenerateAsync(
+                    new WordSearchGenerationRequest(root, "sample-book", "demo")));
+
+            Assert.Equal("brand_not_validated", exception.Code);
+            Assert.Contains("brand_fingerprint_changed", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task CertifyBrandAsync(IServiceProvider services, string root)
     {
         var result = await services.GetRequiredService<IBrandValidationService>().ValidateAsync(root, "demo");
         Assert.True(result.IsSuccess);

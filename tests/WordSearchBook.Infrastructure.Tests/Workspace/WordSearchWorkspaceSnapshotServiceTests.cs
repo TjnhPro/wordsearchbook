@@ -92,6 +92,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
                     Assert.Equal("front", folder.Key);
                     Assert.True(folder.Exists);
                     Assert.Equal(["a.png", "B.JPG"], folder.Files.Select(file => file.Name));
+                    Assert.All(folder.Files, file => Assert.Equal(BrandValidationStatus.NotValidated, file.Status));
                 },
                 folder =>
                 {
