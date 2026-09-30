@@ -49,6 +49,74 @@ public sealed class BookGenerationWorker(
     }
 }
 
+public sealed class BookDataValidationWorker(
+    IBookDataValidationService validationService,
+    IWorkspaceSnapshotService snapshotService)
+    : BackgroundTaskWorker<BookDataValidationRequest, BookDataValidationTaskResult>
+{
+    public override BackgroundTaskKind Kind => BackgroundTaskKind.BookDataValidation;
+
+    protected override async ValueTask<BookDataValidationTaskResult> ExecuteTypedAsync(
+        BookDataValidationRequest request,
+        IBackgroundTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            context.Report("Validating data.csv", subject: request.BookId);
+            var validation = await validationService.ValidateAsync(request.RootPath, request.BookId, cancellationToken);
+            context.Report("Refreshing workspace", subject: request.BookId);
+            var snapshot = await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
+            return new BookDataValidationTaskResult(snapshot, validation);
+        }
+        catch (WordSearchGenerationException exception)
+        {
+            throw new BackgroundTaskFailureException(exception.Code, exception.Message);
+        }
+    }
+}
+
+public sealed class BookProcessingWorker(
+    IBookProcessingService processingService,
+    IWorkspaceSnapshotService snapshotService)
+    : BackgroundTaskWorker<BookProcessingTaskRequest, BookProcessingTaskResult>
+{
+    public override BackgroundTaskKind Kind => BackgroundTaskKind.BookProcessing;
+
+    protected override async ValueTask<BookProcessingTaskResult> ExecuteTypedAsync(
+        BookProcessingTaskRequest request,
+        IBackgroundTaskContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var progress = new BackgroundTaskProgress(context, request.BookId);
+            var processing = await processingService.ProcessAsync(
+                new BookProcessingRequest(request.RootPath, request.BookId, request.BrandId),
+                progress,
+                cancellationToken);
+            context.Report("Refreshing workspace", subject: request.BookId);
+            var snapshot = await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
+            return new BookProcessingTaskResult(snapshot, processing);
+        }
+        catch (WordSearchGenerationException exception)
+        {
+            throw new BackgroundTaskFailureException(exception.Code, exception.Message);
+        }
+    }
+
+    private sealed class BackgroundTaskProgress(IBackgroundTaskContext context, string bookId)
+        : IProgress<BookProcessingProgress>
+    {
+        public void Report(BookProcessingProgress value) => context.Report(
+            value.Step,
+            value.Completed,
+            value.Total,
+            value.Detail,
+            bookId);
+    }
+}
+
 public sealed class BookBrandAssignmentWorker(
     IBookBrandAssignmentStore assignmentStore,
     IWorkspaceSnapshotService snapshotService)

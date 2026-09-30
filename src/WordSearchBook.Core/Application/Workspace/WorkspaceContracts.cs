@@ -68,6 +68,12 @@ public sealed record WorkspaceRefreshRequest(string RootPath);
 
 public sealed record BookGenerationTaskRequest(string RootPath, string BookId, string BrandId);
 
+public sealed record BookProcessingTaskRequest(string RootPath, string BookId, string BrandId);
+
+public sealed record BookProcessingTaskResult(
+    WorkspaceSnapshot Snapshot,
+    BookProcessingResult Processing);
+
 public sealed record BookDataValidationRequest(string RootPath, string BookId);
 
 public sealed record BookDataValidationTaskResult(

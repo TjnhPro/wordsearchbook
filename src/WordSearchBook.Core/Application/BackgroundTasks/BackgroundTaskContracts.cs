@@ -21,6 +21,8 @@ public enum BackgroundTaskKind
 {
     WorkspaceRefresh,
     BookGeneration,
+    BookDataValidation,
+    BookProcessing,
     SettingsSave,
     BookBrandAssignmentSave,
     BrandCreate,

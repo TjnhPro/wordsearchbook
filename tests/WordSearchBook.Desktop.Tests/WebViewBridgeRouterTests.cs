@@ -67,24 +67,38 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
-    public async Task EnqueuesBookGenerationWithTypedPayload()
+    public async Task EnqueuesBookProcessingWithTypedPayload()
     {
         var router = CreateRouter(out var manager);
 
         using var response = JsonDocument.Parse(await router.HandleAsync(
-            """{"id":"generate-1","type":"book.generate","payload":{"bookId":"book-one","brandId":"demo"}}"""));
+            """{"id":"process-1","type":"book.process","payload":{"bookId":"book-one","brandId":"demo"}}"""));
 
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
-        Assert.Equal(BackgroundTaskKind.BookGeneration, manager.LastKind);
-        var request = Assert.IsType<BookGenerationTaskRequest>(manager.LastRequest);
+        Assert.Equal(BackgroundTaskKind.BookProcessing, manager.LastKind);
+        var request = Assert.IsType<BookProcessingTaskRequest>(manager.LastRequest);
         Assert.Equal(("book-one", "demo"), (request.BookId, request.BrandId));
+    }
+
+    [Fact]
+    public async Task EnqueuesBookDataValidationWithTypedPayload()
+    {
+        var router = CreateRouter(out var manager);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"data-1","type":"book.data.validate","payload":{"bookId":"book-one"}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(BackgroundTaskKind.BookDataValidation, manager.LastKind);
+        var request = Assert.IsType<BookDataValidationRequest>(manager.LastRequest);
+        Assert.Equal("book-one", request.BookId);
     }
 
     [Fact]
     public async Task RejectsInvalidCommandPayload()
     {
         using var response = JsonDocument.Parse(await CreateRouter(out _).HandleAsync(
-            """{"id":"generate-2","type":"book.generate","payload":{"bookId":"book-one"}}"""));
+            """{"id":"process-2","type":"book.process","payload":{"bookId":"book-one"}}"""));
 
         Assert.Equal("invalid_payload", response.RootElement.GetProperty("error").GetProperty("code").GetString());
     }
@@ -160,6 +174,20 @@ public sealed class WebViewBridgeRouterTests
         Assert.Equal("brand.folder.opened", response.RootElement.GetProperty("type").GetString());
         Assert.Equal(Path.GetFullPath("application-root"), folderAction.RootPath);
         Assert.Equal("demo", folderAction.BrandId);
+    }
+
+    [Fact]
+    public async Task OpensBookOutputFolderUsingDesktopRoot()
+    {
+        var router = CreateRouter(out _, out _, out var outputFolderAction);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"book-output-1","type":"book.output.open","payload":{"bookId":"book-one"}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal("book.output.opened", response.RootElement.GetProperty("type").GetString());
+        Assert.Equal(Path.GetFullPath("application-root"), outputFolderAction.RootPath);
+        Assert.Equal("book-one", outputFolderAction.BookId);
     }
 
     [Theory]
@@ -241,6 +269,62 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
+    public async Task TaskDetailMapsBookDataValidationAndProcessingResults()
+    {
+        var router = CreateRouter(out var manager);
+        var snapshot = new WorkspaceSnapshot(
+            Path.GetFullPath("application-root"),
+            null,
+            null,
+            [],
+            [],
+            DateTimeOffset.UtcNow);
+        var validation = new BookDataValidationResult(
+            new BookDataValidationState(BookDataValidationStatus.Validated, ContentHash: "sha256:data"),
+            []);
+        var validationTaskId = manager.AddCompleted(
+            new BookDataValidationTaskResult(snapshot, validation),
+            BackgroundTaskKind.BookDataValidation);
+        using var validationResponse = JsonDocument.Parse(await router.HandleAsync(JsonSerializer.Serialize(new
+        {
+            id = "task-data",
+            type = "task.get",
+            payload = new { taskId = validationTaskId.Value }
+        })));
+        Assert.Equal(
+            "sha256:data",
+            validationResponse.RootElement.GetProperty("data").GetProperty("bookDataValidationResult")
+                .GetProperty("state").GetProperty("contentHash").GetString());
+
+        var processedAt = DateTimeOffset.UtcNow;
+        var processing = new BookProcessingResult(
+            "book-one",
+            "demo",
+            "output/book-one.interior.pdf",
+            "output/answer",
+            1,
+            0,
+            0,
+            1,
+            100,
+            [],
+            processedAt);
+        var processingTaskId = manager.AddCompleted(
+            new BookProcessingTaskResult(snapshot, processing),
+            BackgroundTaskKind.BookProcessing);
+        using var processingResponse = JsonDocument.Parse(await router.HandleAsync(JsonSerializer.Serialize(new
+        {
+            id = "task-processing",
+            type = "task.get",
+            payload = new { taskId = processingTaskId.Value }
+        })));
+        Assert.Equal(
+            "book-one",
+            processingResponse.RootElement.GetProperty("data").GetProperty("bookProcessingResult")
+                .GetProperty("bookId").GetString());
+    }
+
+    [Fact]
     public async Task EnqueuesTypedBrandSettingsSave()
     {
         var router = CreateRouter(out var manager);
@@ -293,13 +377,23 @@ public sealed class WebViewBridgeRouterTests
         out StubTaskManager manager,
         out StubBrandFolderActionService folderAction)
     {
+        return CreateRouter(out manager, out folderAction, out _);
+    }
+
+    private static WebViewBridgeRouter CreateRouter(
+        out StubTaskManager manager,
+        out StubBrandFolderActionService folderAction,
+        out StubBookOutputFolderActionService outputFolderAction)
+    {
         manager = new StubTaskManager();
         folderAction = new StubBrandFolderActionService();
+        outputFolderAction = new StubBookOutputFolderActionService();
         return new WebViewBridgeRouter(
             new StubApplicationInfoProvider(),
             manager,
             new StubRootProvider(Path.GetFullPath("application-root")),
-            folderAction);
+            folderAction,
+            outputFolderAction);
     }
 
     private sealed class StubApplicationInfoProvider : IApplicationInfoProvider
@@ -395,6 +489,23 @@ public sealed class WebViewBridgeRouterTests
         {
             RootPath = rootPath;
             BrandId = brandId;
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StubBookOutputFolderActionService : IBookOutputFolderActionService
+    {
+        public string? RootPath { get; private set; }
+
+        public string? BookId { get; private set; }
+
+        public ValueTask OpenAsync(
+            string rootPath,
+            string bookId,
+            CancellationToken cancellationToken = default)
+        {
+            RootPath = rootPath;
+            BookId = bookId;
             return ValueTask.CompletedTask;
         }
     }

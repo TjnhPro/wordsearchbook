@@ -45,6 +45,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWorkspaceSnapshotService, WordSearchWorkspaceSnapshotService>();
         services.AddKeyedSingleton<IBackgroundTaskWorker, WorkspaceRefreshWorker>(BackgroundTaskKind.WorkspaceRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookGenerationWorker>(BackgroundTaskKind.BookGeneration);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, BookDataValidationWorker>(BackgroundTaskKind.BookDataValidation);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, BookProcessingWorker>(BackgroundTaskKind.BookProcessing);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookBrandAssignmentWorker>(BackgroundTaskKind.BookBrandAssignmentSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, SettingsSaveWorker>(BackgroundTaskKind.SettingsSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BrandCreateWorker>(BackgroundTaskKind.BrandCreate);
