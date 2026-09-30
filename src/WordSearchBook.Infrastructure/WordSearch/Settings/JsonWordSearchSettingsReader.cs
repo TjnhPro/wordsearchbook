@@ -161,6 +161,13 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
                 "page_size_unsupported",
                 $"Page size must be {SupportedPageWidth}x{SupportedPageHeight}.");
         }
+
+        if (global.MaximumKeywordLength is < 1 or > 100)
+        {
+            throw new WordSearchGenerationException(
+                "maximum_keyword_length_invalid",
+                "Maximum keyword length must be between 1 and 100 characters.");
+        }
     }
 
     internal static void ValidateBrand(GlobalWordSearchSettings global, BrandWordSearchSettings brand)

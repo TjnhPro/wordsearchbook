@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Infrastructure.WordSearch.Validation;
@@ -11,18 +12,19 @@ namespace WordSearchBook.Infrastructure.WordSearch.Validation;
 public sealed class CsvBookDataValidationService(IBookDataValidationStateStore stateStore)
     : IBookDataValidationService
 {
-    internal const int SchemaVersion = 1;
+    internal const int SchemaVersion = 2;
     internal const int FingerprintFormatVersion = 1;
     internal const int RequiredEntriesPerTopic = 20;
-    internal const int MaximumKeywordLength = 13;
     internal const int MaximumWordSearchKeyLength = 20;
     private static readonly string[] RequiredHeaders = ["TOPIC", "KEYWORD", "WORD SEARCH KEY"];
 
     public async ValueTask<BookDataValidationState> CheckStateAsync(
         string rootPath,
         string bookId,
+        int maximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
         CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumKeywordLength, 1);
         try
         {
             var record = await stateStore.LoadAsync(rootPath, bookId, cancellationToken);
@@ -34,6 +36,11 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
             if (record.SchemaVersion != SchemaVersion || record.FingerprintFormatVersion != FingerprintFormatVersion)
             {
                 return NeedsValidation(record, "book_data_validation_record_outdated");
+            }
+
+            if (record.MaximumKeywordLength != maximumKeywordLength)
+            {
+                return NeedsValidation(record, "book_data_validation_rule_changed");
             }
 
             var dataPath = JsonBookDataValidationStateStore.ResolveDataPath(rootPath, bookId);
@@ -62,8 +69,10 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
     public async ValueTask<BookDataValidationResult> ValidateAsync(
         string rootPath,
         string bookId,
+        int maximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
         CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumKeywordLength, 1);
         cancellationToken.ThrowIfCancellationRequested();
         var dataPath = JsonBookDataValidationStateStore.ResolveDataPath(rootPath, bookId);
         var before = CaptureMetadata(dataPath);
@@ -85,7 +94,7 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
             try
             {
                 content = await File.ReadAllBytesAsync(dataPath, cancellationToken);
-                var parsed = Parse(content, cancellationToken);
+                var parsed = Parse(content, maximumKeywordLength, cancellationToken);
                 topics = parsed.Topics;
                 failures = parsed.Failures;
             }
@@ -116,6 +125,7 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
         var record = new BookDataValidationRecord(
             SchemaVersion,
             FingerprintFormatVersion,
+            maximumKeywordLength,
             metadataFingerprint,
             contentHash,
             validatedAt,
@@ -148,7 +158,10 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
             : new BookDataFileMetadata(false, 0, 0);
     }
 
-    private static ParsedValidation Parse(byte[] content, CancellationToken cancellationToken)
+    private static ParsedValidation Parse(
+        byte[] content,
+        int maximumKeywordLength,
+        CancellationToken cancellationToken)
     {
         var failures = new List<BookDataValidationFailure>();
         var topicBuilders = new List<TopicBuilder>();
@@ -217,13 +230,13 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
                 else
                 {
                     var compactKeywordLength = keyword.Count(character => !char.IsWhiteSpace(character));
-                    if (compactKeywordLength > MaximumKeywordLength)
+                    if (compactKeywordLength > maximumKeywordLength)
                     {
                         AddTopicFailure(
                             failures,
                             builder,
                             "keyword_too_long",
-                            $"CSV row {sourceRow}: Keyword '{keyword}' exceeds {MaximumKeywordLength} characters when whitespace is ignored.",
+                            $"CSV row {sourceRow}: Keyword '{keyword}' exceeds {maximumKeywordLength} characters when whitespace is ignored.",
                             sourceRow);
                     }
                 }

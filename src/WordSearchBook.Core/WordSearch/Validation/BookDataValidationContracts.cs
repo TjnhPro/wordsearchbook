@@ -1,3 +1,5 @@
+using WordSearchBook.Core.WordSearch.Domain;
+
 namespace WordSearchBook.Core.WordSearch.Validation;
 
 public enum BookDataValidationStatus
@@ -22,6 +24,7 @@ public sealed record BookDataValidationFailure(
 public sealed record BookDataValidationRecord(
     int SchemaVersion,
     int FingerprintFormatVersion,
+    int MaximumKeywordLength,
     string MetadataFingerprint,
     string? ContentHash,
     DateTimeOffset ValidatedAtUtc,
@@ -55,11 +58,13 @@ public interface IBookDataValidationService
     ValueTask<BookDataValidationState> CheckStateAsync(
         string rootPath,
         string bookId,
+        int maximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
         CancellationToken cancellationToken = default);
 
     ValueTask<BookDataValidationResult> ValidateAsync(
         string rootPath,
         string bookId,
+        int maximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
         CancellationToken cancellationToken = default);
 }
 

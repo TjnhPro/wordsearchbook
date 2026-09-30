@@ -20,9 +20,11 @@ public sealed class JsonWordSearchSettingsReaderTests
             Assert.Equal(20, settings.Board.Height);
             Assert.Equal(2588, settings.Page.Width);
             Assert.Equal(3375, settings.Page.Height);
+            Assert.Equal(13, settings.MaximumKeywordLength);
             var json = await File.ReadAllTextAsync(Path.Combine(root, "settings.json"));
             Assert.Contains("\"board\"", json, StringComparison.Ordinal);
             Assert.Contains("\"page\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"maximumKeywordLength\": 13", json, StringComparison.Ordinal);
             Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
         }
         finally
@@ -40,6 +42,7 @@ public sealed class JsonWordSearchSettingsReaderTests
 
         Assert.Equal(20, settings.Global.Board.Width);
         Assert.Equal(3375, settings.Global.Page.Height);
+        Assert.Equal(13, settings.Global.MaximumKeywordLength);
         Assert.Equal(2000, settings.Brand.BoardGame.Rectangle.Width);
         Assert.Equal(TextAlignment.Center, settings.Brand.Topic.Alignment);
         Assert.Equal(4, settings.Brand.KeywordList.Columns.Count);

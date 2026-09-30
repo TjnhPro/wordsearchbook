@@ -53,6 +53,27 @@ public sealed class CsvBookDataValidationServiceTests
     }
 
     [Fact]
+    public async Task KeywordLengthSettingChangeRequiresValidationAgain()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var service = CreateService();
+            var result = await service.ValidateAsync(root, "sample-book", maximumKeywordLength: 13);
+
+            var state = await service.CheckStateAsync(root, "sample-book", maximumKeywordLength: 12);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(BookDataValidationStatus.NeedsValidation, state.Status);
+            Assert.Equal("book_data_validation_rule_changed", state.ReasonCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ReportsMultipleRowAndTopicFailuresAndPersistsInvalidState()
     {
         var root = CopyFixtureToTemporaryRoot();

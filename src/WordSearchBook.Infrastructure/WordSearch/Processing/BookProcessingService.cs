@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Settings;
 using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Infrastructure.WordSearch.Processing;
@@ -14,7 +15,8 @@ namespace WordSearchBook.Infrastructure.WordSearch.Processing;
 public sealed class BookProcessingService(
     IWordSearchBookGenerationService generationService,
     IBookDataValidationService dataValidationService,
-    IBrandValidationService brandValidationService) : IBookProcessingService
+    IBrandValidationService brandValidationService,
+    IWordSearchSettingsReader settingsReader) : IBookProcessingService
 {
     private const int ManifestSchemaVersion = 1;
     private const int PageWidth = 2588;
@@ -69,7 +71,12 @@ public sealed class BookProcessingService(
                 bufferSize: 128 * 1024,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             var dataHash = $"sha256:{Convert.ToHexStringLower(await SHA256.HashDataAsync(dataLock, cancellationToken))}";
-            var dataState = await dataValidationService.CheckStateAsync(rootPath, request.BookId, cancellationToken);
+            var globalSettings = await settingsReader.ReadGlobalAsync(rootPath, cancellationToken);
+            var dataState = await dataValidationService.CheckStateAsync(
+                rootPath,
+                request.BookId,
+                globalSettings.MaximumKeywordLength,
+                cancellationToken);
             if (dataState.Status != BookDataValidationStatus.Validated ||
                 !string.Equals(dataState.ContentHash, dataHash, StringComparison.Ordinal))
             {

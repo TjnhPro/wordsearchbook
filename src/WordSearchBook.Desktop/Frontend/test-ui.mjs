@@ -103,12 +103,13 @@ test("activates sidebar routes and renders their detail shell", () => {
 
 test("builds a typed global settings payload from form values", () => {
   const values = new Map([
-    ["board.width", "20"], ["board.height", "20"]
+    ["board.width", "20"], ["board.height", "20"], ["maximumKeywordLength", "13"]
   ]);
 
   assert.deepEqual(globalSettingsValue(values), {
     board: { width: 20, height: 20 },
-    page: { width: 2588, height: 3375 }
+    page: { width: 2588, height: 3375 },
+    maximumKeywordLength: 13
   });
 });
 

@@ -109,12 +109,13 @@ public sealed class WebViewBridgeRouterTests
         var router = CreateRouter(out var manager);
 
         using var response = JsonDocument.Parse(await router.HandleAsync(
-            """{"id":"settings-1","type":"settings.global.save","payload":{"settings":{"board":{"width":20,"height":20},"page":{"width":2588,"height":3375}}}}"""));
+            """{"id":"settings-1","type":"settings.global.save","payload":{"settings":{"board":{"width":20,"height":20},"page":{"width":2588,"height":3375},"maximumKeywordLength":13}}}"""));
 
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
         Assert.Equal(BackgroundTaskKind.SettingsSave, manager.LastKind);
         var request = Assert.IsType<GlobalSettingsSaveTaskRequest>(manager.LastRequest);
         Assert.Equal(2588, request.Settings.Page.Width);
+        Assert.Equal(13, request.Settings.MaximumKeywordLength);
     }
 
     [Fact]

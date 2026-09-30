@@ -11,15 +11,16 @@ namespace WordSearchBook.Infrastructure.WordSearch.Input;
 public sealed class CsvWordSearchInputReader : IWordSearchInputReader
 {
     private const int RequiredEntriesPerTopic = 20;
-    private const int MaximumKeywordLength = 13;
     private const int MaximumWordLength = 20;
     private static readonly string[] RequiredHeaders = ["TOPIC", "KEYWORD", "WORD SEARCH KEY"];
 
     public async Task<IReadOnlyList<WordSearchTopic>> ReadAsync(
         string dataCsvPath,
+        int maximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataCsvPath);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumKeywordLength, 1);
 
         if (!File.Exists(dataCsvPath))
         {
@@ -51,11 +52,11 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
                 var sourceRow = csv.Context.Parser?.Row ?? 0;
                 var topicName = RequireUppercase(csv.GetField("Topic"), "Topic", sourceRow);
                 var keyword = RequireUppercase(csv.GetField("Keyword"), "Keyword", sourceRow);
-                if (keyword.Count(character => !char.IsWhiteSpace(character)) > MaximumKeywordLength)
+                if (keyword.Count(character => !char.IsWhiteSpace(character)) > maximumKeywordLength)
                 {
                     throw new WordSearchGenerationException(
                         "keyword_too_long",
-                        $"CSV row {sourceRow}: Keyword '{keyword}' exceeds {MaximumKeywordLength} characters when whitespace is ignored.");
+                        $"CSV row {sourceRow}: Keyword '{keyword}' exceeds {maximumKeywordLength} characters when whitespace is ignored.");
                 }
                 var wordSearchKey = NormalizeWordSearchKey(csv.GetField("Word Search Key"), sourceRow);
 

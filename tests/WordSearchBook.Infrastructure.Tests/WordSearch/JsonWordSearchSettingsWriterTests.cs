@@ -136,6 +136,29 @@ public sealed class JsonWordSearchSettingsWriterTests
         }
     }
 
+    [Fact]
+    public async Task SavesMaximumKeywordLengthInGlobalSettings()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var reader = new JsonWordSearchSettingsReader();
+            var writer = new JsonWordSearchSettingsWriter(reader);
+            var current = await reader.ReadGlobalAsync(root);
+
+            await writer.SaveGlobalAsync(root, current with { MaximumKeywordLength = 9 });
+            var saved = await reader.ReadGlobalAsync(root);
+
+            Assert.Equal(9, saved.MaximumKeywordLength);
+            var json = await File.ReadAllTextAsync(Path.Combine(root, "settings.json"));
+            Assert.Contains("\"maximumKeywordLength\": 9", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CopyFixtureToTemporaryRoot()
     {
         var source = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");

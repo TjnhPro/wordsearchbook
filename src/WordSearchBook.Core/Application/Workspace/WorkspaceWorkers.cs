@@ -51,6 +51,7 @@ public sealed class BookGenerationWorker(
 
 public sealed class BookDataValidationWorker(
     IBookDataValidationService validationService,
+    IWordSearchSettingsReader settingsReader,
     IWorkspaceSnapshotService snapshotService)
     : BackgroundTaskWorker<BookDataValidationRequest, BookDataValidationTaskResult>
 {
@@ -64,7 +65,12 @@ public sealed class BookDataValidationWorker(
         try
         {
             context.Report("Validating data.csv", subject: request.BookId);
-            var validation = await validationService.ValidateAsync(request.RootPath, request.BookId, cancellationToken);
+            var global = await settingsReader.ReadGlobalAsync(request.RootPath, cancellationToken);
+            var validation = await validationService.ValidateAsync(
+                request.RootPath,
+                request.BookId,
+                global.MaximumKeywordLength,
+                cancellationToken);
             context.Report("Refreshing workspace", subject: request.BookId);
             var snapshot = await snapshotService.RefreshAsync(request.RootPath, cancellationToken);
             return new BookDataValidationTaskResult(snapshot, validation);

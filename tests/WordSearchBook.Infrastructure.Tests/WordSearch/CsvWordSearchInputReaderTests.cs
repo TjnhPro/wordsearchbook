@@ -128,6 +128,27 @@ public sealed class CsvWordSearchInputReaderTests
         }
     }
 
+    [Fact]
+    public async Task UsesConfiguredMaximumKeywordLengthIgnoringWhitespace()
+    {
+        var rows = CreateValidRows();
+        rows[0] = "Animals,Too Long,WORDZZ";
+        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                new CsvWordSearchInputReader().ReadAsync(path, maximumKeywordLength: 6));
+
+            Assert.Equal("keyword_too_long", exception.Code);
+            Assert.Contains("6 characters", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string[] CreateValidRows() => Enumerable.Range(1, 20)
         .Select(index => $"Animals,Keyword {index},WORD{ToLetters(index)}")
         .ToArray();

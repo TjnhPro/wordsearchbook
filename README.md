@@ -42,7 +42,7 @@ Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tê
 
 ## Word Search Core MVP
 
-Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Keyword hiển thị tối đa 13 ký tự sau khi bỏ khoảng trắng. Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
+Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Giới hạn Keyword hiển thị nằm ở `maximumKeywordLength` trong Global Settings (mặc định 13 ký tự, không tính khoảng trắng). Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
 
 `IWordSearchBookGenerationService` sinh board puzzle/answer, sau đó compose hai trang hoàn chỉnh từ `brands/{brand}/page_layout.png`. Layout bắt buộc là PNG `2588x3375`; thiếu file, sai kích thước hoặc không đọc được sẽ làm generation fail với error code ổn định thay vì dùng fallback.
 

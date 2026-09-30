@@ -29,7 +29,7 @@ public sealed class WordSearchWorkspaceSnapshotService(
         var assignments = await assignmentStore.ReadAsync(cancellationToken);
         var (global, globalIssue) = await ReadGlobalAsync(fullRoot, cancellationToken);
         var brands = await ReadBrandsAsync(fullRoot, global, globalIssue, cancellationToken);
-        var books = await ReadBooksAsync(fullRoot, assignments, brands, cancellationToken);
+        var books = await ReadBooksAsync(fullRoot, assignments, brands, global, cancellationToken);
         return new WorkspaceSnapshot(fullRoot, global, globalIssue, brands, books, DateTimeOffset.UtcNow);
     }
 
@@ -129,6 +129,7 @@ public sealed class WordSearchWorkspaceSnapshotService(
         string rootPath,
         IReadOnlyDictionary<string, string> assignments,
         IReadOnlyList<WorkspaceBrand> brands,
+        GlobalWordSearchSettings? global,
         CancellationToken cancellationToken)
     {
         var inputRoot = Path.Combine(rootPath, "input");
@@ -154,7 +155,11 @@ public sealed class WordSearchWorkspaceSnapshotService(
             }
 
             var cachedBrands = ReadCachedBrands(directory);
-            var validation = await bookDataValidationService.CheckStateAsync(rootPath, bookId, cancellationToken);
+            var validation = await bookDataValidationService.CheckStateAsync(
+                rootPath,
+                bookId,
+                global?.MaximumKeywordLength ?? WordSearchSettingsDefaults.MaximumKeywordLength,
+                cancellationToken);
             var output = await outputSnapshotService.ReadAsync(
                 rootPath,
                 bookId,
