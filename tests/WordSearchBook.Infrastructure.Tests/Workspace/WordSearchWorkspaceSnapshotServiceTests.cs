@@ -20,7 +20,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
                 dataValidation,
                 new JsonWordSearchSettingsReader(),
                 CreateValidationService(),
-                new StubAssignmentStore(new Dictionary<string, string> { ["sample-book"] = "demo" }));
+                new StubAssignmentStore(new Dictionary<string, string> { ["sample-book"] = "demo" }),
+                new JsonBookOutputSnapshotService());
 
             var snapshot = await service.RefreshAsync(root);
 
@@ -56,7 +57,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
                 dataValidation,
                 new JsonWordSearchSettingsReader(),
                 CreateValidationService(),
-                new StubAssignmentStore(new Dictionary<string, string>()));
+                new StubAssignmentStore(new Dictionary<string, string>()),
+                new JsonBookOutputSnapshotService());
 
             var snapshot = await service.RefreshAsync(root);
 
@@ -90,7 +92,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
                 CreateDataValidationService(),
                 new JsonWordSearchSettingsReader(),
                 CreateValidationService(),
-                new StubAssignmentStore(new Dictionary<string, string>()));
+                new StubAssignmentStore(new Dictionary<string, string>()),
+                new JsonBookOutputSnapshotService());
 
             var snapshot = await service.RefreshAsync(root);
 
@@ -128,7 +131,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
                 CreateDataValidationService(),
                 new JsonWordSearchSettingsReader(),
                 CreateValidationService(),
-                new StubAssignmentStore(new Dictionary<string, string>()));
+                new StubAssignmentStore(new Dictionary<string, string>()),
+                new JsonBookOutputSnapshotService());
 
             var snapshot = await service.RefreshAsync(root);
 
@@ -155,7 +159,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
                 CreateDataValidationService(),
                 new JsonWordSearchSettingsReader(),
                 CreateValidationService(),
-                new StubAssignmentStore(new Dictionary<string, string>()));
+                new StubAssignmentStore(new Dictionary<string, string>()),
+                new JsonBookOutputSnapshotService());
 
             var snapshot = await service.RefreshAsync(root);
 

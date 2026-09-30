@@ -6,6 +6,28 @@ namespace WordSearchBook.Core.Application.Workspace;
 
 public sealed record WorkspaceIssue(string Code, string Message);
 
+public enum BookOutputStatus
+{
+    Missing,
+    Ready,
+    Stale,
+    Unavailable
+}
+
+public sealed record WorkspaceBookOutput(
+    BookOutputStatus Status,
+    string? BrandId = null,
+    string? PdfFileName = null,
+    long PdfLengthBytes = 0,
+    int PuzzlePageCount = 0,
+    int FrontPageCount = 0,
+    int BackPageCount = 0,
+    int PdfPageCount = 0,
+    int AnswerCount = 0,
+    long AnswerLengthBytes = 0,
+    DateTimeOffset? ProcessedAtUtc = null,
+    string? ReasonCode = null);
+
 public sealed record WorkspaceBrandAssetFile(
     string Name,
     string RelativePath,
@@ -31,7 +53,8 @@ public sealed record WorkspaceBook(
     string? SelectedBrandId,
     IReadOnlyList<string> CachedBrandIds,
     WorkspaceIssue? Issue,
-    BookDataValidationState? DataValidation = null);
+    BookDataValidationState? DataValidation = null,
+    WorkspaceBookOutput? Output = null);
 
 public sealed record WorkspaceSnapshot(
     string RootPath,

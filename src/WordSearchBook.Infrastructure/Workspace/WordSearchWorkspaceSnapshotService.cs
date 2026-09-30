@@ -12,7 +12,8 @@ public sealed class WordSearchWorkspaceSnapshotService(
     IBookDataValidationService bookDataValidationService,
     IWordSearchSettingsReader settingsReader,
     IBrandValidationService validationService,
-    IBookBrandAssignmentStore assignmentStore) : IWorkspaceSnapshotService
+    IBookBrandAssignmentStore assignmentStore,
+    IBookOutputSnapshotService outputSnapshotService) : IWorkspaceSnapshotService
 {
     public async Task<WorkspaceSnapshot> RefreshAsync(
         string rootPath,
@@ -137,6 +138,10 @@ public sealed class WordSearchWorkspaceSnapshotService(
         }
 
         var knownBrands = brands.Select(brand => brand.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var brandValidations = brands.ToDictionary(
+            brand => brand.Id,
+            brand => brand.Validation,
+            StringComparer.OrdinalIgnoreCase);
         var results = new List<WorkspaceBook>();
         foreach (var directory in Directory.EnumerateDirectories(inputRoot).Order(StringComparer.OrdinalIgnoreCase))
         {
@@ -150,13 +155,21 @@ public sealed class WordSearchWorkspaceSnapshotService(
 
             var cachedBrands = ReadCachedBrands(directory);
             var validation = await bookDataValidationService.CheckStateAsync(rootPath, bookId, cancellationToken);
+            var output = await outputSnapshotService.ReadAsync(
+                rootPath,
+                bookId,
+                selectedBrandId,
+                validation,
+                brandValidations,
+                cancellationToken);
             results.Add(new WorkspaceBook(
                 bookId,
                 validation.TopicCount,
                 selectedBrandId,
                 cachedBrands,
                 DataIssue(validation),
-                validation));
+                validation,
+                output));
         }
 
         return results;
