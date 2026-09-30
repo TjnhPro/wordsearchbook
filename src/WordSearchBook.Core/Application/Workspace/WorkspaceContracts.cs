@@ -29,3 +29,14 @@ public sealed record WorkspaceRefreshRequest(string RootPath);
 public sealed record BookGenerationTaskRequest(string RootPath, string BookId, string BrandId);
 
 public sealed record BookBrandAssignmentTaskRequest(string RootPath, string BookId, string BrandId);
+
+public abstract record SettingsSaveTaskRequest(string RootPath);
+
+public sealed record GlobalSettingsSaveTaskRequest(
+    string RootPath,
+    GlobalWordSearchSettings Settings) : SettingsSaveTaskRequest(RootPath);
+
+public sealed record BrandSettingsSaveTaskRequest(
+    string RootPath,
+    string BrandId,
+    BrandWordSearchSettings Settings) : SettingsSaveTaskRequest(RootPath);

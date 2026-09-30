@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IApplicationInfoProvider, ApplicationInfoProvider>();
         services.AddSingleton<IWordSearchInputReader, CsvWordSearchInputReader>();
         services.AddSingleton<IWordSearchSettingsReader, JsonWordSearchSettingsReader>();
+        services.AddSingleton<IWordSearchSettingsWriter, JsonWordSearchSettingsWriter>();
         services.AddSingleton<IWordSearchPuzzleGenerator, WordSearchPuzzleGenerator>();
         services.AddSingleton<IWordSearchBoardRenderer, SystemDrawingWordSearchBoardRenderer>();
         services.AddSingleton<IWordSearchCachePublisher, FileSystemWordSearchCachePublisher>();
@@ -34,6 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, WorkspaceRefreshWorker>(BackgroundTaskKind.WorkspaceRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookGenerationWorker>(BackgroundTaskKind.BookGeneration);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookBrandAssignmentWorker>(BackgroundTaskKind.BookBrandAssignmentSave);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, SettingsSaveWorker>(BackgroundTaskKind.SettingsSave);
         return services;
     }
 }

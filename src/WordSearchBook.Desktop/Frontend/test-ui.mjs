@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, connectToDesktop } = require("./js/app.js");
+const { activateRoute, connectToDesktop, globalSettingsValue } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -99,4 +99,16 @@ test("activates sidebar routes and renders their detail shell", () => {
   assert.equal(titleElement.textContent, "Tasks");
   assert.match(contentElement.innerHTML, /Background tasks/);
   assert.deepEqual(navigationItems.map(item => item.active), [false, true, false]);
+});
+
+test("builds a typed global settings payload from form values", () => {
+  const values = new Map([
+    ["board.width", "20"], ["board.height", "20"],
+    ["page.width", "2400"], ["page.height", "3000"]
+  ]);
+
+  assert.deepEqual(globalSettingsValue(values), {
+    board: { width: 20, height: 20 },
+    page: { width: 2400, height: 3000 }
+  });
 });

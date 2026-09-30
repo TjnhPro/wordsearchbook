@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using WordSearchBook.Core.Application;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
+using WordSearchBook.Core.WordSearch.Domain;
 
 namespace WordSearchBook.Desktop.Bridge;
 
@@ -41,6 +42,8 @@ public sealed class WebViewBridgeRouter(
                         cancellationToken))),
                 "book.generate" => await StartGenerationAsync(request, cancellationToken),
                 "book.brand.assign" => await SaveAssignmentAsync(request, cancellationToken),
+                "settings.global.save" => await SaveGlobalSettingsAsync(request, cancellationToken),
+                "settings.brand.save" => await SaveBrandSettingsAsync(request, cancellationToken),
                 "task.list" => Success(
                     request.Id,
                     "background.tasks",
@@ -51,7 +54,7 @@ public sealed class WebViewBridgeRouter(
             };
             return Serialize(response);
         }
-        catch (ArgumentException)
+        catch (Exception exception) when (exception is ArgumentException or JsonException)
         {
             return Serialize(Failure(request.Id, "invalid_payload", "The bridge message payload is invalid."));
         }
@@ -81,6 +84,42 @@ public sealed class WebViewBridgeRouter(
             bookId,
             bookId,
             new BookBrandAssignmentTaskRequest(rootProvider.RootPath, bookId, brandId),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> SaveGlobalSettingsAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var settings = ReadSettings<GlobalWordSearchSettings>(request.Payload);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.SettingsSave,
+            "global",
+            "Global",
+            new GlobalSettingsSaveTaskRequest(rootProvider.RootPath, settings),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> SaveBrandSettingsAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Payload is not { ValueKind: JsonValueKind.Object } payload ||
+            !payload.TryGetProperty("brandId", out var brandValue))
+        {
+            throw new ArgumentException("brandId is required.");
+        }
+
+        var brandId = brandValue.GetString();
+        ArgumentException.ThrowIfNullOrWhiteSpace(brandId);
+        var settings = ReadSettings<BrandWordSearchSettings>(request.Payload);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.SettingsSave,
+            $"brand:{brandId}",
+            brandId,
+            new BrandSettingsSaveTaskRequest(rootProvider.RootPath, brandId, settings),
             cancellationToken);
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
     }
@@ -137,6 +176,18 @@ public sealed class WebViewBridgeRouter(
         }
 
         return taskId;
+    }
+
+    private static T ReadSettings<T>(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } value ||
+            !value.TryGetProperty("settings", out var settingsValue))
+        {
+            throw new ArgumentException("settings are required.");
+        }
+
+        return settingsValue.Deserialize<T>(JsonOptions)
+            ?? throw new ArgumentException("settings are required.");
     }
 
     private static BridgeRequest? Parse(string? rawMessage)

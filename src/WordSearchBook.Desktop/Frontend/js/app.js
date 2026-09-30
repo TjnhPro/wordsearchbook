@@ -4,7 +4,7 @@ const routeDefinitions = {
   settings: { title: "Settings", heading: "Workspace settings", copy: "Review and edit global and brand layout settings." }
 };
 const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
-const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, client: null, pollTimers: new Map() };
+const state = { route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedSettingsBrandId: null, client: null, pollTimers: new Map() };
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" })[character]);
@@ -42,8 +42,42 @@ function renderTasks() {
   return `<section class="panel"><div class="panel-header"><div><h3>Task history</h3><p>Latest activity first</p></div><button class="button-secondary" data-action="list-tasks">Refresh</button></div><div class="table-scroll"><table><thead><tr><th>Kind</th><th>Subject</th><th>State</th><th>Step</th><th>Error</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
+function settingInput(name, label, value, type = "number", extra = "") {
+  return `<label class="setting-field"><span>${label}</span><input name="${name}" type="${type}" value="${escapeHtml(value)}" ${extra} required></label>`;
+}
+
+function regionEditor(name, label, region) {
+  const rectangle = region.rectangle;
+  const font = region.font;
+  return `<fieldset class="settings-group"><legend>${label}</legend><div class="settings-grid">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${settingInput(`${name}.fontName`, "Font", font.name, "text")}${settingInput(`${name}.fontSize`, "Font size", font.size, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput(`${name}.fontColor`, "Font color", font.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset>`;
+}
+
 function renderSettings() {
-  return `<div class="empty-panel"><p class="empty-panel-title">Settings editor is next</p><p class="empty-panel-copy">The workspace snapshot already validates global and existing brand settings. Editing and atomic save are added in Phase 4.</p></div>`;
+  if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading settings…</p></div>`;
+  const global = state.snapshot.globalSettings;
+  const brands = state.snapshot.brands ?? [];
+  if (!global) return `<section class="panel">${issueMarkup(state.snapshot.globalSettingsIssue)}</section>`;
+  const editableBrands = brands.filter(brand => brand.settings);
+  if (!editableBrands.some(brand => brand.id === state.selectedSettingsBrandId)) state.selectedSettingsBrandId = editableBrands[0]?.id ?? null;
+  const selected = editableBrands.find(brand => brand.id === state.selectedSettingsBrandId);
+  const brandOptions = editableBrands.map(brand => `<option value="${escapeHtml(brand.id)}" ${brand.id === state.selectedSettingsBrandId ? "selected" : ""}>${escapeHtml(brand.id)}</option>`).join("");
+  const globalForm = `<form class="panel settings-form" data-form="global-settings"><div class="panel-header"><div><h3>Global settings</h3><p>Board and output page</p></div><button class="button-primary" type="submit">Save global</button></div><div class="settings-grid mt-5">${settingInput("board.width", "Board width", global.board.width, "number", "min=\"1\"")}${settingInput("board.height", "Board height", global.board.height, "number", "min=\"1\"")}${settingInput("page.width", "Page width", global.page.width, "number", "min=\"1\"")}${settingInput("page.height", "Page height", global.page.height, "number", "min=\"1\"")}</div></form>`;
+  const brandForm = selected ? `<form class="panel settings-form" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="panel-header"><div><h3>Brand layout</h3><p>Edit an existing brand only</p></div><div class="settings-actions"><select data-action="select-settings-brand">${brandOptions}</select><button class="button-primary" type="submit">Save brand</button></div></div>${regionEditor("topic", "Topic", selected.settings.topic)}${regionEditor("boardGame", "Board game", selected.settings.boardGame)}${regionEditor("keywordList", "Keyword list", selected.settings.keywordList)}${regionEditor("pageNumber", "Page number", selected.settings.pageNumber)}<fieldset class="settings-group"><legend>Answer line</legend><div class="settings-grid">${settingInput("answerLine.width", "Width", selected.settings.answerLine.width, "number", "min=\"0.1\" step=\"0.1\"")}${settingInput("answerLine.color", "Color", selected.settings.answerLine.color, "text", "pattern=\"#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\"")}</div></fieldset></form>` : `<section class="panel"><p class="empty-panel-copy">No valid existing brand is available to edit.</p></section>`;
+  return `<div class="settings-stack">${globalForm}${brandForm}</div>`;
+}
+
+function numberValue(data, name) { return Number(data.get(name)); }
+function regionValue(data, name) {
+  return {
+    rectangle: { x: numberValue(data, `${name}.x`), y: numberValue(data, `${name}.y`), width: numberValue(data, `${name}.width`), height: numberValue(data, `${name}.height`) },
+    font: { name: String(data.get(`${name}.fontName`) ?? ""), size: numberValue(data, `${name}.fontSize`), color: String(data.get(`${name}.fontColor`) ?? "") }
+  };
+}
+function globalSettingsValue(data) {
+  return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: { width: numberValue(data, "page.width"), height: numberValue(data, "page.height") } };
+}
+function brandSettingsValue(data) {
+  return { topic: regionValue(data, "topic"), boardGame: regionValue(data, "boardGame"), keywordList: regionValue(data, "keywordList"), pageNumber: regionValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
 }
 
 function routeMarkup(routeName) {
@@ -170,8 +204,17 @@ function initializeWorkspace(documentRoot, render) {
   });
   documentRoot.addEventListener("change", event => {
     const target = event.target;
+    if (target.dataset?.action === "select-settings-brand") { state.selectedSettingsBrandId = target.value; applyAndRender(); return; }
     if (target.dataset?.action !== "assign-brand" || !target.value) return;
     start("book.brand.assign", { bookId: target.dataset.bookId, brandId: target.value });
+  });
+  documentRoot.addEventListener("submit", event => {
+    const form = event.target;
+    if (!form.dataset?.form) return;
+    event.preventDefault();
+    const data = new FormData(form);
+    if (form.dataset.form === "global-settings") start("settings.global.save", { settings: globalSettingsValue(data) });
+    if (form.dataset.form === "brand-settings") start("settings.brand.save", { brandId: form.dataset.brandId, settings: brandSettingsValue(data) });
   });
   start("workspace.refresh");
   listTasks();
@@ -195,6 +238,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, connectToDesktop, createBridgeClient, initializeNavigation };
+const api = { activateRoute, brandSettingsValue, connectToDesktop, createBridgeClient, globalSettingsValue, initializeNavigation };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

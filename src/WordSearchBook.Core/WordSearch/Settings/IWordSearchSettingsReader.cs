@@ -19,3 +19,17 @@ public interface IWordSearchSettingsReader
         string brandId,
         CancellationToken cancellationToken = default);
 }
+
+public interface IWordSearchSettingsWriter
+{
+    Task SaveGlobalAsync(
+        string rootPath,
+        GlobalWordSearchSettings settings,
+        CancellationToken cancellationToken = default);
+
+    Task SaveBrandAsync(
+        string rootPath,
+        string brandId,
+        BrandWordSearchSettings settings,
+        CancellationToken cancellationToken = default);
+}

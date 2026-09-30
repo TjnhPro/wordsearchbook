@@ -86,7 +86,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         }
     }
 
-    private static void ValidateGlobal(GlobalWordSearchSettings global)
+    internal static void ValidateGlobal(GlobalWordSearchSettings global)
     {
         if (global.Board is null || global.Page is null)
         {
@@ -107,7 +107,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
 
     }
 
-    private static void ValidateBrand(GlobalWordSearchSettings global, BrandWordSearchSettings brand)
+    internal static void ValidateBrand(GlobalWordSearchSettings global, BrandWordSearchSettings brand)
     {
         ValidateRegion("topic", brand.Topic, global.Page);
         ValidateRegion("boardGame", brand.BoardGame, global.Page);

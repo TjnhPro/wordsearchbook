@@ -88,6 +88,20 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
+    public async Task EnqueuesTypedGlobalSettingsSave()
+    {
+        var router = CreateRouter(out var manager);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"settings-1","type":"settings.global.save","payload":{"settings":{"board":{"width":20,"height":20},"page":{"width":2400,"height":3000}}}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(BackgroundTaskKind.SettingsSave, manager.LastKind);
+        var request = Assert.IsType<GlobalSettingsSaveTaskRequest>(manager.LastRequest);
+        Assert.Equal(2400, request.Settings.Page.Width);
+    }
+
+    [Fact]
     public void ResolvesFrontendEntryPointBelowBaseDirectory()
     {
         var baseDirectory = Path.Combine(Path.GetTempPath(), "word-search-book-tests");
