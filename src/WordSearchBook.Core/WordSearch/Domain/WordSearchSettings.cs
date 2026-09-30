@@ -20,3 +20,7 @@ public sealed record BrandWordSearchSettings(
     TextRegionSettings KeywordList,
     TextRegionSettings PageNumber,
     AnswerLineSettings AnswerLine);
+
+public sealed record WordSearchSettingsBundle(
+    GlobalWordSearchSettings Global,
+    BrandWordSearchSettings Brand);
