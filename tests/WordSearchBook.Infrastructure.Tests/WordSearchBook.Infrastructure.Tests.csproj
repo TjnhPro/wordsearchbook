@@ -16,4 +16,10 @@
     <Using Include="Xunit" />
     <ProjectReference Include="..\..\src\WordSearchBook.Infrastructure\WordSearchBook.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="TestData\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
