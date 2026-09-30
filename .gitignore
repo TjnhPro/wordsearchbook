@@ -27,6 +27,7 @@ WebView2Data/
 .orca/
 .playwright-cli/
 .test-artifacts/
+.example/
 
 # OS files
 .DS_Store
