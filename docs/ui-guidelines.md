@@ -16,6 +16,10 @@
 - Arrange Topic, Board game, Keyword list, and Page number editors in a `2x2` grid. Keep Answer styling in a collapsed advanced section.
 - Show the output page as fixed `2588x3375`; do not expose editable page width or height controls.
 - Each brand owns `brands/{brand}/page_layout.png`. It must be a PNG exactly `2588x3375`; Create Brand also creates a white default layout.
+- Creating a valid default PNG does not certify it. Show `Not validated`, `Validated`, or `Needs validation` separately from settings health.
+- Deep PNG validation runs only when the user selects **Validate layout**. Workspace load and refresh may read `brand.validation.json` and file metadata but must not decode the PNG.
+- Keep the Page Layout card visible even when Brand or global settings are invalid. Disable validation while the current Brand form is dirty or saving.
+- Books may list any Brand with readable settings, but **Generate pages** stays disabled until that Brand's layout state is `Validated`.
 - Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
 - Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.
 - Keyword list exposes four independent X/Y anchors and one shared vertical step. The 20 keywords fill column-major with five rows per column; alignment applies to every keyword.

@@ -63,7 +63,9 @@ Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách
 
 ## Desktop workspace
 
-Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Brands tạo brand mặc định kèm layout trắng, tìm kiếm và chỉnh anchor/style; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
+Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books cho phép chọn brand, ghi nhớ lựa chọn trong `%LocalAppData%\WordSearchBook\workspace-state.json` và enqueue generation; Brands tạo brand mặc định kèm layout trắng, tìm kiếm, chỉnh anchor/style và validate `page_layout.png` thủ công; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
+
+Mỗi brand lưu certificate tại `brands/{brand}/brand.validation.json`. Workspace startup chỉ so certificate với metadata `page_layout.png`; việc decode PNG và kiểm tra đúng `2588x3375` chỉ chạy qua nút **Validate layout** trong background queue. Generation bị chặn ở cả UI và Core cho đến khi trạng thái layout là `Validated`.
 
 Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Migration chỉ diễn ra trong memory; lần Save Brand tiếp theo ghi schema canonical gồm text anchor/alignment và bốn keyword column anchors.
 

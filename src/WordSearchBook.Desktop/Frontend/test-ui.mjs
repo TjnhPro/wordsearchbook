@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, brandNavigationDisposition, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -227,4 +227,17 @@ test("validates brand names as safe Windows folder names", () => {
   assert.match(validateBrandFolderName("CON"), /reserved/);
   assert.match(validateBrandFolderName("trailing."), /valid Windows folder name/);
   assert.match(validateBrandFolderName(""), /Enter/);
+});
+
+test("maps all page-layout validation states to stable UI badges", () => {
+  assert.deepEqual(brandValidationPresentation({ status: "NotValidated" }), { label: "Not validated", tone: "neutral" });
+  assert.deepEqual(brandValidationPresentation({ status: "Validated" }), { label: "Validated", tone: "good" });
+  assert.deepEqual(brandValidationPresentation({ status: "NeedsValidation" }), { label: "Needs validation", tone: "warn" });
+});
+
+test("allows generation only for a certified brand", () => {
+  assert.equal(canGenerateWithBrand({ layoutValidation: { status: "Validated" } }), true);
+  assert.equal(canGenerateWithBrand({ layoutValidation: { status: "NeedsValidation" } }), false);
+  assert.equal(canGenerateWithBrand({ layoutValidation: { status: "NotValidated" } }), false);
+  assert.equal(canGenerateWithBrand(null), false);
 });
