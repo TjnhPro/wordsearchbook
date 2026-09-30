@@ -1,0 +1,10 @@
+{
+  "board": {
+    "width": 20,
+    "height": 20
+  },
+  "page": {
+    "width": 2400,
+    "height": 3000
+  }
+}

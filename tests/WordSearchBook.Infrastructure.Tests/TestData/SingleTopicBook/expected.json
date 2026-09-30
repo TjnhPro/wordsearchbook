@@ -1,0 +1,52 @@
+{
+  "bookId": "sample-book",
+  "brandId": "demo",
+  "topic": {
+    "index": 1,
+    "name": "Amazing Animals",
+    "keywords": [
+      "Red Panda",
+      "Bald Eagle",
+      "Blue Whale",
+      "Polar Bear",
+      "Snow Leopard",
+      "Sea Turtle",
+      "Giant Panda",
+      "Gray Wolf",
+      "Brown Bear",
+      "Wild Horse",
+      "King Cobra",
+      "Tiger Shark",
+      "Golden Eagle",
+      "Black Swan",
+      "River Otter",
+      "Mountain Goat",
+      "Desert Fox",
+      "Green Turtle",
+      "White Tiger",
+      "Coral Snake"
+    ],
+    "wordSearchKeys": [
+      "REDPANDA",
+      "BALDEAGLE",
+      "BLUEWHALE",
+      "POLARBEAR",
+      "SNOWLEOPARD",
+      "SEATURTLE",
+      "GIANTPANDA",
+      "GRAYWOLF",
+      "BROWNBEAR",
+      "WILDHORSE",
+      "KINGCOBRA",
+      "TIGERSHARK",
+      "GOLDENEAGLE",
+      "BLACKSWAN",
+      "RIVEROTTER",
+      "MOUNTAINGOAT",
+      "DESERTFOX",
+      "GREENTURTLE",
+      "WHITETIGER",
+      "CORALSNAKE"
+    ]
+  }
+}
