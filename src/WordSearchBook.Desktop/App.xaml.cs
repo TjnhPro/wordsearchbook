@@ -3,6 +3,7 @@ using System.Windows;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Desktop.BackgroundTasks;
 using WordSearchBook.Desktop.Bridge;
+using WordSearchBook.Desktop.Shutdown;
 using WordSearchBook.Infrastructure.DependencyInjection;
 
 namespace WordSearchBook.Desktop;
@@ -20,6 +21,7 @@ public partial class App : Application
         services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
         services.AddSingleton<IApplicationRootProvider, ExecutableApplicationRootProvider>();
         services.AddSingleton<IBrandFolderActionService, BrandFolderActionService>();
+        services.AddSingleton<ApplicationCloseCoordinator>();
         services.AddSingleton<WebViewBridgeRouter>();
         services.AddSingleton<MainWindow>();
 

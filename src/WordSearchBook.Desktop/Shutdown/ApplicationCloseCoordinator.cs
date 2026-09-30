@@ -2,7 +2,7 @@ using WordSearchBook.Core.Application.BackgroundTasks;
 
 namespace WordSearchBook.Desktop.Shutdown;
 
-internal sealed class ApplicationCloseCoordinator(IBackgroundTaskManager taskManager)
+public sealed class ApplicationCloseCoordinator(IBackgroundTaskManager taskManager)
 {
     internal static bool IsActive(BackgroundTaskState state) =>
         state is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling;

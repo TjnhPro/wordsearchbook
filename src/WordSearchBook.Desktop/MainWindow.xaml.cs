@@ -4,20 +4,23 @@ using System.IO;
 using System.Windows;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Desktop.Bridge;
+using WordSearchBook.Desktop.Shutdown;
 
 namespace WordSearchBook.Desktop;
 
 public partial class MainWindow : Window
 {
     private readonly WebViewBridgeRouter bridgeRouter;
-    private readonly IBackgroundTaskManager taskManager;
+    private readonly ApplicationCloseCoordinator closeCoordinator;
     private bool allowClose;
     private bool closeFlowRunning;
 
-    public MainWindow(WebViewBridgeRouter bridgeRouter, IBackgroundTaskManager taskManager)
+    public MainWindow(
+        WebViewBridgeRouter bridgeRouter,
+        ApplicationCloseCoordinator closeCoordinator)
     {
         this.bridgeRouter = bridgeRouter;
-        this.taskManager = taskManager;
+        this.closeCoordinator = closeCoordinator;
         InitializeComponent();
         Closing += OnClosing;
         Closed += OnClosed;
@@ -73,7 +76,7 @@ public partial class MainWindow : Window
             "WebView2");
 
     internal static bool HasActiveTasks(IEnumerable<BackgroundTaskSnapshot> tasks) => tasks.Any(task =>
-        task.State is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling);
+        ApplicationCloseCoordinator.IsActive(task.State));
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
@@ -91,28 +94,19 @@ public partial class MainWindow : Window
         closeFlowRunning = true;
         try
         {
-            var active = (await taskManager.ListAsync())
-                .Where(task => task.State is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling)
-                .ToArray();
-            if (active.Length > 0)
+            var active = await closeCoordinator.GetActiveTasksAsync();
+            if (active.Count > 0)
             {
-                var answer = MessageBox.Show(
-                    "Background work is still active. Cancel it and close Word Search Book?",
-                    "Close Word Search Book",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                if (answer != MessageBoxResult.Yes)
+                var dialog = new CloseApplicationDialog(
+                    active.Count,
+                    () => closeCoordinator.CancelAndWaitAsync(active, TimeSpan.FromSeconds(5)))
+                {
+                    Owner = this
+                };
+                if (dialog.ShowDialog() != true)
                 {
                     return;
                 }
-
-                foreach (var task in active)
-                {
-                    await taskManager.CancelAsync(task.TaskId);
-                }
-
-                await Task.WhenAll(active.Select(task =>
-                    taskManager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(5)).AsTask()));
             }
 
             allowClose = true;
