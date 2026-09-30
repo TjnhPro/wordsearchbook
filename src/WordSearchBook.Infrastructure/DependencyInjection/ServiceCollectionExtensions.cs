@@ -36,6 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookGenerationWorker>(BackgroundTaskKind.BookGeneration);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookBrandAssignmentWorker>(BackgroundTaskKind.BookBrandAssignmentSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, SettingsSaveWorker>(BackgroundTaskKind.SettingsSave);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, BrandCreateWorker>(BackgroundTaskKind.BrandCreate);
         return services;
     }
 }

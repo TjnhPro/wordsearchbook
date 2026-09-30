@@ -102,6 +102,21 @@ public sealed class WebViewBridgeRouterTests
     }
 
     [Fact]
+    public async Task EnqueuesTypedBrandCreate()
+    {
+        var router = CreateRouter(out var manager);
+
+        using var response = JsonDocument.Parse(await router.HandleAsync(
+            """{"id":"brand-create-1","type":"brand.create","payload":{"brandId":"new-brand"}}"""));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        Assert.Equal(BackgroundTaskKind.BrandCreate, manager.LastKind);
+        var request = Assert.IsType<BrandCreateTaskRequest>(manager.LastRequest);
+        Assert.Equal("new-brand", request.BrandId);
+        Assert.Equal(Path.GetFullPath("application-root"), request.RootPath);
+    }
+
+    [Fact]
     public async Task EnqueuesTypedBrandSettingsSave()
     {
         var router = CreateRouter(out var manager);

@@ -37,4 +37,16 @@ public sealed class WordSearchDomainContractTests
         Assert.Equal(puzzle.Data[0, 1], puzzle.Answer[0, 1]);
         Assert.Equal(3, puzzle.Placements[0].Cells.Count);
     }
+
+    [Fact]
+    public void ProvidesACompleteDefaultBrandLayout()
+    {
+        var settings = WordSearchSettingsDefaults.CreateBrand();
+
+        Assert.Equal(new LayoutRectangle(200, 100, 2000, 200), settings.Topic.Rectangle);
+        Assert.Equal(new LayoutRectangle(200, 400, 2000, 2000), settings.BoardGame.Rectangle);
+        Assert.Equal("Arial", settings.KeywordList.Font.Name);
+        Assert.Equal(14, settings.PageNumber.Font.Size);
+        Assert.Equal(new AnswerLineSettings(28, "#8B1E1E"), settings.AnswerLine);
+    }
 }

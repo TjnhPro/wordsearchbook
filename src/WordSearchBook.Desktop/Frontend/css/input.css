@@ -128,4 +128,14 @@
   .unsaved-dialog h2 { @apply text-lg font-bold; }
   .unsaved-dialog p { @apply mt-2 text-sm leading-6 text-slate-500; }
   .unsaved-dialog-actions { @apply mt-6 flex justify-end gap-3; }
+  .create-brand-dialog { @apply w-full max-w-md rounded-2xl border-0 bg-white p-6 text-slate-900 shadow-2xl; }
+  .create-brand-dialog::backdrop { @apply bg-slate-950/40 backdrop-blur-sm; }
+  .create-brand-dialog h2 { @apply text-lg font-bold; }
+  .create-brand-dialog > form > p { @apply mt-2 text-sm leading-6 text-slate-500; }
+  .create-brand-field { @apply mt-5 block; }
+  .create-brand-field span { @apply mb-1.5 block text-xs font-bold text-slate-600; }
+  .create-brand-field input { @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100; }
+  .create-brand-hint { @apply text-xs; }
+  .create-brand-error { @apply rounded-lg bg-rose-50 p-3 text-rose-700; }
+  .create-brand-actions { @apply mt-6 flex justify-end gap-3; }
 }

@@ -38,6 +38,15 @@ function brandNavigationDisposition(routeName, brandDirty, brandSaving) {
   if (brandSaving) return "blocked";
   return routeName === "brands" && brandDirty ? "prompt" : "apply";
 }
+function validateBrandFolderName(value) {
+  const name = String(value ?? "").trim();
+  const reserved = new Set(["con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"]);
+  if (!name) return "Enter a brand folder name.";
+  if (name.length > 64) return "Brand folder name must be 64 characters or fewer.";
+  if (name === "." || name === ".." || /[<>:"/\\|?*\u0000-\u001F]/u.test(name) || name.endsWith(".")) return "Enter a valid Windows folder name.";
+  if (reserved.has(name.split(".")[0].toLocaleLowerCase())) return "This folder name is reserved by Windows.";
+  return null;
+}
 function applyNavigation(destination, render) {
   if (destination.kind === "brand") {
     state.selectedBrandId = destination.value;
@@ -104,7 +113,7 @@ function brandRowsMarkup(brands, selectedBrandId) {
 function renderBrands() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading brands…</p></div>`;
   const brands = state.snapshot.brands ?? [];
-  if (!brands.length) return `<div class="empty-panel"><p class="empty-panel-title">No brands found</p><p class="empty-panel-copy">Add brands/{brand}/settings.json below the application root and refresh the workspace.</p></div>`;
+  if (!brands.length) return `<div class="empty-panel"><p class="empty-panel-title">No brands found</p><p class="empty-panel-copy">Create a brand with default layout settings to get started.</p><button class="button-primary mt-5" type="button" data-action="open-create-brand">Create brand</button></div>`;
   if (!brands.some(brand => brand.id === state.selectedBrandId)) {
     state.selectedBrandId = brands.find(brand => brand.settings)?.id ?? brands[0].id;
   }
@@ -116,7 +125,7 @@ function renderBrands() {
   }
   const filteredBrands = filterBrands(brands, state.brandSearchQuery);
   const rows = brandRowsMarkup(filteredBrands, selected.id);
-  const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p data-brand-result-count>${filteredBrands.length} of ${brands.length} shown</p></div></div><label class="brand-search"><span class="sr-only">Search brands by name</span><input type="search" data-action="search-brands" value="${escapeHtml(state.brandSearchQuery)}" placeholder="Search brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${rows}</div></section>`;
+  const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p data-brand-result-count>${filteredBrands.length} of ${brands.length} shown</p></div><button class="button-secondary" type="button" data-action="open-create-brand">Create brand</button></div><label class="brand-search"><span class="sr-only">Search brands by name</span><input type="search" data-action="search-brands" value="${escapeHtml(state.brandSearchQuery)}" placeholder="Search brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${rows}</div></section>`;
   if (!selected.settings) {
     return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Invalid", "bad")}</div><div class="brand-detail-scroll">${issueMarkup(selected.issue)}</div></section></div>`;
   }
@@ -250,6 +259,9 @@ function refreshBrandFormState(documentRoot) {
     button.textContent = state.brandSaving ? "Saving…" : "Save brand";
   }
   form.querySelectorAll("input").forEach(input => { input.disabled = state.brandSaving; });
+  documentRoot.querySelectorAll('[data-action="open-create-brand"]').forEach(button => {
+    button.disabled = state.brandDirty || state.brandSaving;
+  });
 }
 
 function showBrandSaveMessage(documentRoot, message) {
@@ -260,6 +272,10 @@ function showBrandSaveMessage(documentRoot, message) {
 }
 
 function initializeWorkspace(documentRoot, render) {
+  let brandCreating = false;
+  documentRoot.querySelector("#create-brand-dialog")?.addEventListener("cancel", event => {
+    if (brandCreating) event.preventDefault();
+  });
   const renderCurrentRoute = () => { render(state.route); refreshGlobalTaskStatus(documentRoot); };
   const applyTaskUpdate = snapshotChanged => {
     if (shouldRenderForTaskUpdate(state.route, snapshotChanged, state.brandDirty)) render(state.route);
@@ -343,6 +359,52 @@ function initializeWorkspace(documentRoot, render) {
       }
     });
   };
+  const setCreateBrandState = (creating, errorMessage = null) => {
+    brandCreating = creating;
+    const dialog = documentRoot.querySelector("#create-brand-dialog");
+    const input = dialog?.querySelector('input[name="brandId"]');
+    const submit = dialog?.querySelector("[data-create-brand-submit]");
+    const error = dialog?.querySelector("[data-create-brand-error]");
+    if (input) input.disabled = creating;
+    if (submit) {
+      submit.disabled = creating;
+      submit.textContent = creating ? "Creating…" : "Create brand";
+    }
+    if (error) {
+      error.textContent = errorMessage ?? "";
+      error.classList.toggle("hidden", !errorMessage);
+    }
+  };
+  const createBrand = form => {
+    const input = form.elements.namedItem("brandId");
+    const brandId = String(input?.value ?? "").trim();
+    const validationError = validateBrandFolderName(brandId);
+    const duplicate = state.snapshot?.brands?.some(brand => brand.id.toLocaleLowerCase() === brandId.toLocaleLowerCase());
+    if (validationError || duplicate) {
+      setCreateBrandState(false, validationError ?? `Brand '${brandId}' already exists.`);
+      return;
+    }
+
+    setCreateBrandState(true);
+    start("brand.create", { brandId }, {
+      onRejected: error => setCreateBrandState(false, error?.message ?? "Brand could not be created."),
+      onTerminal: task => {
+        if (task.state !== "Completed") {
+          setCreateBrandState(false, task.errorMessage || `Brand creation was ${String(task.state).toLocaleLowerCase()}.`);
+          return;
+        }
+
+        setCreateBrandState(false);
+        documentRoot.querySelector("#create-brand-dialog")?.close();
+        state.selectedBrandId = brandId;
+        state.brandSearchQuery = "";
+        state.brandBaselineId = null;
+        state.brandBaseline = null;
+        state.brandDirty = false;
+        renderCurrentRoute();
+      }
+    });
+  };
 
   documentRoot.addEventListener("click", event => {
     const target = event.target.closest?.("[data-action]");
@@ -350,6 +412,17 @@ function initializeWorkspace(documentRoot, render) {
     if (target.dataset.action === "select-book") { state.selectedBookId = target.dataset.bookId; renderCurrentRoute(); }
     if (target.dataset.action === "select-brand" && target.dataset.brandId !== state.selectedBrandId) {
       requestNavigation({ kind: "brand", value: target.dataset.brandId }, documentRoot, render);
+    }
+    if (target.dataset.action === "open-create-brand" && !state.brandDirty && !state.brandSaving) {
+      const dialog = documentRoot.querySelector("#create-brand-dialog");
+      const form = dialog?.querySelector('[data-form="create-brand"]');
+      form?.reset();
+      setCreateBrandState(false);
+      dialog?.showModal();
+      form?.elements.namedItem("brandId")?.focus();
+    }
+    if (target.dataset.action === "cancel-create-brand" && !brandCreating) {
+      documentRoot.querySelector("#create-brand-dialog")?.close();
     }
     if (target.dataset.action === "dirty-cancel") {
       state.pendingNavigation = null;
@@ -399,6 +472,10 @@ function initializeWorkspace(documentRoot, render) {
     const form = event.target;
     if (!form.dataset?.form) return;
     event.preventDefault();
+    if (form.dataset.form === "create-brand") {
+      createBrand(form);
+      return;
+    }
     const data = new FormData(form);
     if (form.dataset.form === "global-settings") start("settings.global.save", { settings: globalSettingsValue(data) });
     if (form.dataset.form === "brand-settings") saveBrandForm(form);
@@ -425,6 +502,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate };
+const api = { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

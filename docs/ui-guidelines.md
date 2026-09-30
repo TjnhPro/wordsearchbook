@@ -17,3 +17,4 @@
 - Brand Detail may scroll independently when needed. Keep its brand name, save state, and Save button visible.
 - Do not redraw a dirty Brand Detail during task polling. Save through the background queue and retain the draft when saving fails.
 - Before changing brand or leaving the Brands route with unsaved edits, require an explicit Save, Discard, or Cancel choice.
+- Create Brand accepts one valid Windows folder name, creates default settings through the background queue, then reloads and selects the new brand.

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate } = require("./js/app.js");
+const { activateRoute, brandNavigationDisposition, brandSettingsValue, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -195,4 +195,13 @@ test("guards navigation while a brand is dirty or saving", () => {
   assert.equal(brandNavigationDisposition("brands", true, true), "blocked");
   assert.equal(brandNavigationDisposition("brands", false, false), "apply");
   assert.equal(brandNavigationDisposition("books", true, false), "apply");
+});
+
+test("validates brand names as safe Windows folder names", () => {
+  assert.equal(validateBrandFolderName("new-brand"), null);
+  assert.equal(validateBrandFolderName("Brand 2026"), null);
+  assert.match(validateBrandFolderName("../escape"), /valid Windows folder name/);
+  assert.match(validateBrandFolderName("CON"), /reserved/);
+  assert.match(validateBrandFolderName("trailing."), /valid Windows folder name/);
+  assert.match(validateBrandFolderName(""), /Enter/);
 });

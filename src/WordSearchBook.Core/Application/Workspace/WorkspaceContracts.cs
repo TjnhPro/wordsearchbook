@@ -30,6 +30,8 @@ public sealed record BookGenerationTaskRequest(string RootPath, string BookId, s
 
 public sealed record BookBrandAssignmentTaskRequest(string RootPath, string BookId, string BrandId);
 
+public sealed record BrandCreateTaskRequest(string RootPath, string BrandId);
+
 public abstract record SettingsSaveTaskRequest(string RootPath);
 
 public sealed record GlobalSettingsSaveTaskRequest(
