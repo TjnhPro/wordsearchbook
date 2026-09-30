@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -229,17 +229,41 @@ test("validates brand names as safe Windows folder names", () => {
   assert.match(validateBrandFolderName(""), /Enter/);
 });
 
-test("maps all page-layout validation states to stable UI badges", () => {
+test("maps all brand validation states to stable UI badges", () => {
   assert.deepEqual(brandValidationPresentation({ status: "NotValidated" }), { label: "Not validated", tone: "neutral" });
   assert.deepEqual(brandValidationPresentation({ status: "Validated" }), { label: "Validated", tone: "good" });
   assert.deepEqual(brandValidationPresentation({ status: "NeedsValidation" }), { label: "Needs validation", tone: "warn" });
 });
 
 test("allows generation only for a certified brand", () => {
-  assert.equal(canGenerateWithBrand({ layoutValidation: { status: "Validated" } }), true);
-  assert.equal(canGenerateWithBrand({ layoutValidation: { status: "NeedsValidation" } }), false);
-  assert.equal(canGenerateWithBrand({ layoutValidation: { status: "NotValidated" } }), false);
+  assert.equal(canGenerateWithBrand({ validation: { status: "Validated" } }), true);
+  assert.equal(canGenerateWithBrand({ validation: { status: "NeedsValidation" } }), false);
+  assert.equal(canGenerateWithBrand({ validation: { status: "NotValidated" } }), false);
   assert.equal(canGenerateWithBrand(null), false);
+});
+
+test("renders optional brand folders with empty and per-file validation states", () => {
+  const empty = brandAssetFolderMarkup({ key: "front", relativePath: "front", exists: true, files: [] });
+  assert.match(empty, /Front/);
+  assert.match(empty, /No images — optional/);
+  assert.match(empty, /0 images/);
+
+  const populated = brandAssetFolderMarkup({
+    key: "back",
+    relativePath: "back",
+    exists: true,
+    files: [
+      { name: "closing.jpg", relativePath: "back/closing.jpg", extension: ".jpg", status: "NeedsValidation" },
+      { name: "final.png", relativePath: "back/final.png", extension: ".png", status: "Validated" }
+    ]
+  }, [{ target: "back/closing.jpg", message: "Wrong size" }]);
+  assert.match(populated, /Back/);
+  assert.match(populated, /2 images/);
+  assert.match(populated, /closing\.jpg/);
+  assert.match(populated, /Invalid/);
+  assert.match(populated, /Wrong size/);
+  assert.match(populated, /final\.png/);
+  assert.match(populated, /Validated/);
 });
 
 test("disables preview drawing for unsaved, saving, or active brand state", () => {
