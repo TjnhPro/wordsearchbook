@@ -7,6 +7,8 @@
 - Do not reduce `Width`, `Height`, `MinWidth`, or `MinHeight` below `1610x910` unless the complete desktop layout is redesigned and verified at the new baseline.
 - Keep primary navigation on the left and the selected workspace detail on the right.
 - Long-running and file-system operations must continue to use the background task queue so rendering and navigation remain responsive.
+- Always use one modal dialog with confirmation and loading states when the user closes the application. After confirmation, show an indeterminate progress indicator for at least 500ms so the closing state is perceptible.
+- Cancel all active tasks and close automatically when they stop or after five seconds. Do not allow the dialog to be dismissed while cancellation is in progress.
 
 ## Brands workspace
 
