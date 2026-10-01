@@ -22,7 +22,8 @@ public interface IWordSearchSettingsReader
 
 public sealed record BrandSettingsReadResult(
     BrandWordSearchSettings Settings,
-    bool RequiresSave);
+    bool RequiresSave,
+    string? UpdateReasonCode = null);
 
 public interface IWordSearchSettingsWriter
 {

@@ -21,6 +21,7 @@ public sealed class BrandValidationDefinitionTests
             BrandValidationDefinition.Entries,
             pageLayout => AssertRequiredLayout(pageLayout, BrandValidationDefinition.PageLayoutKey),
             frontLayout => AssertRequiredLayout(frontLayout, BrandValidationDefinition.FrontLayoutKey),
+            qrPage => AssertOptionalPng(qrPage, BrandValidationDefinition.QrPageKey),
             front => AssertOptionalImageFolder(front, BrandValidationDefinition.FrontKey),
             back => AssertOptionalImageFolder(back, BrandValidationDefinition.BackKey));
     }
@@ -66,6 +67,15 @@ public sealed class BrandValidationDefinitionTests
         Assert.Equal(expectedKey, entry.Key);
         Assert.Equal(BrandValidationTargetKind.File, entry.TargetKind);
         Assert.True(entry.Required);
+        Assert.False(entry.Recursive);
+        Assert.Equal([".png"], entry.Extensions);
+    }
+
+    private static void AssertOptionalPng(BrandValidationEntryDefinition entry, string expectedKey)
+    {
+        Assert.Equal(expectedKey, entry.Key);
+        Assert.Equal(BrandValidationTargetKind.File, entry.TargetKind);
+        Assert.False(entry.Required);
         Assert.False(entry.Recursive);
         Assert.Equal([".png"], entry.Extensions);
     }

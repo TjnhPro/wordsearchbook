@@ -47,6 +47,7 @@ public sealed class WordSearchDomainContractTests
 
         Assert.Equal((1200, 100, TextAlignment.Center), (settings.Topic.X, settings.Topic.Y, settings.Topic.Alignment));
         Assert.Equal(new LayoutRectangle(300, 3000, 1988, 220), settings.Quote.Rectangle);
+        Assert.Null(settings.QrPage);
         Assert.Equal(new LayoutRectangle(200, 400, 2000, 2000), settings.BoardGame.Rectangle);
         Assert.Equal(4, settings.KeywordList.Columns.Count);
         Assert.Equal(80, settings.KeywordList.StepY);

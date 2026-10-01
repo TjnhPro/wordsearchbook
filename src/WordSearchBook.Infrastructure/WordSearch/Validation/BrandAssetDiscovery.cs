@@ -32,6 +32,9 @@ internal static class BrandAssetDiscovery
     public static string ResolveFrontLayoutPath(string rootPath, string brandId) =>
         Path.Combine(ResolveBrandDirectory(rootPath, brandId), BrandValidationDefinition.FrontLayoutRelativePath);
 
+    public static string ResolveQrPagePath(string rootPath, string brandId) =>
+        Path.Combine(ResolveBrandDirectory(rootPath, brandId), BrandValidationDefinition.QrPageRelativePath);
+
     public static IReadOnlyList<DiscoveredBrandAssetFolder> DiscoverOptionalFolders(
         string rootPath,
         string brandId)
@@ -61,6 +64,9 @@ internal static class BrandAssetDiscovery
         var frontLayoutPath = ResolveFrontLayoutPath(rootPath, brandId);
         var frontLayout = new FileInfo(frontLayoutPath);
         frontLayout.Refresh();
+        var qrPagePath = ResolveQrPagePath(rootPath, brandId);
+        var qrPage = new FileInfo(qrPagePath);
+        qrPage.Refresh();
         var metadata = new List<BrandValidationFileMetadata>
         {
             layout.Exists
@@ -68,7 +74,10 @@ internal static class BrandAssetDiscovery
                 : BrandValidationFileMetadata.Missing(BrandValidationDefinition.PageLayoutRelativePath),
             frontLayout.Exists
                 ? CreateMetadata(BrandValidationDefinition.FrontLayoutRelativePath, frontLayout)
-                : BrandValidationFileMetadata.Missing(BrandValidationDefinition.FrontLayoutRelativePath)
+                : BrandValidationFileMetadata.Missing(BrandValidationDefinition.FrontLayoutRelativePath),
+            qrPage.Exists
+                ? CreateMetadata(BrandValidationDefinition.QrPageRelativePath, qrPage)
+                : BrandValidationFileMetadata.Missing(BrandValidationDefinition.QrPageRelativePath)
         };
 
         foreach (var asset in DiscoverTrackedFiles(rootPath, brandId))

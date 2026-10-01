@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Core.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Validation;
 
 namespace WordSearchBook.Infrastructure.WordSearch.Settings;
 
@@ -30,9 +31,12 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         var brand = await ReadBrandAsync(rootPath, brandId, global, cancellationToken);
         if (brand.RequiresSave)
         {
+            var message = brand.UpdateReasonCode == "qr_settings_required"
+                ? $"Brand '{brandId}' requires QR Page settings because page_qr.png is present."
+                : $"Brand '{brandId}' settings must be saved to add Quote settings before validation, preview, or processing.";
             throw new WordSearchGenerationException(
-                "brand_settings_update_required",
-                $"Brand '{brandId}' settings must be saved to add Quote settings before validation, preview, or processing.");
+                brand.UpdateReasonCode ?? "brand_settings_update_required",
+                message);
         }
 
         return new WordSearchSettingsBundle(global, brand.Settings);
@@ -62,10 +66,20 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         var document = await ReadJsonAsync<BrandSettingsDocument>(
             Path.Combine(rootPath, "brands", brandId, "settings.json"),
             cancellationToken);
-        var requiresSave = document.Quote is null;
-        var brand = MapBrand(document, requiresSave);
+        var quoteRequiresSave = document.Quote is null;
+        var qrPagePath = Path.Combine(
+            rootPath,
+            "brands",
+            brandId,
+            BrandValidationDefinition.QrPageRelativePath);
+        var qrRequiresSave = File.Exists(qrPagePath) && document.QrPage is null;
+        var requiresSave = quoteRequiresSave || qrRequiresSave;
+        var brand = NormalizeBrand(MapBrand(document, quoteRequiresSave));
         ValidateBrand(global, brand);
-        return new BrandSettingsReadResult(brand, requiresSave);
+        return new BrandSettingsReadResult(
+            brand,
+            requiresSave,
+            quoteRequiresSave ? "brand_settings_update_required" : qrRequiresSave ? "qr_settings_required" : null);
     }
 
     private static async Task<T> ReadJsonAsync<T>(string path, CancellationToken cancellationToken)
@@ -193,6 +207,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         ValidateRegion("boardGame", brand.BoardGame, global.Page);
         ValidateKeywordList(brand.KeywordList, global.Page);
         ValidateAnchor("pageNumber", brand.PageNumber, global.Page);
+        ValidateQrPage(brand.QrPage, global.Page);
 
         var boardRectangle = brand.BoardGame.Rectangle;
         if (boardRectangle.Width != boardRectangle.Height || boardRectangle.Width % SupportedBoardWidth != 0)
@@ -225,7 +240,52 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
             document.BoardGame,
             ReadKeywordList(document.KeywordList),
             ReadAnchor(document.PageNumber, "pageNumber", TextAlignment.Left),
-            document.AnswerLine);
+            document.AnswerLine,
+            document.QrPage);
+    }
+
+    internal static BrandWordSearchSettings NormalizeBrand(BrandWordSearchSettings brand) =>
+        brand.QrPage is null
+            ? brand
+            : brand with
+            {
+                QrPage = brand.QrPage with
+                {
+                    DomainName = (brand.QrPage.DomainName ?? string.Empty).Trim().ToLowerInvariant()
+                }
+            };
+
+    private static void ValidateQrPage(QrPageSettings? qrPage, PageSize page)
+    {
+        if (qrPage is null)
+        {
+            return;
+        }
+
+        if (qrPage.X < 0 || qrPage.Y < 0 || qrPage.Size <= 0 ||
+            (long)qrPage.X + qrPage.Size > page.Width ||
+            (long)qrPage.Y + qrPage.Size > page.Height)
+        {
+            throw new WordSearchGenerationException(
+                "qr_settings_invalid",
+                "qrPage requires non-negative X/Y, a positive Size, and a square area that stays inside the configured page.");
+        }
+
+        var domainName = qrPage.DomainName;
+        if (string.IsNullOrWhiteSpace(domainName) ||
+            domainName.Length > 242 ||
+            domainName.Contains("://", StringComparison.Ordinal) ||
+            domainName.Contains('/') ||
+            domainName.Contains('\\') ||
+            domainName.Contains(':') ||
+            domainName.Contains('?') ||
+            domainName.Contains('#') ||
+            !DomainNamePattern().IsMatch(domainName))
+        {
+            throw new WordSearchGenerationException(
+                "qr_domain_invalid",
+                "qrPage.domainName must be an ASCII DNS suffix such as 'example.com', without a scheme, port, path, query, or fragment.");
+        }
     }
 
     private static AnchoredTextSettings ReadAnchor(JsonElement element, string name, TextAlignment defaultAlignment)
@@ -414,7 +474,8 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         TextRegionSettings? BoardGame,
         JsonElement KeywordList,
         JsonElement PageNumber,
-        AnswerLineSettings? AnswerLine);
+        AnswerLineSettings? AnswerLine,
+        QrPageSettings? QrPage);
 
     private sealed record LegacyTextRegionDocument(LayoutRectangle? Rectangle, FontSettings? Font);
 
@@ -428,4 +489,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")]
     private static partial Regex HexColorPattern();
+
+    [GeneratedRegex("^(?=.{1,242}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")]
+    private static partial Regex DomainNamePattern();
 }

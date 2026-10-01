@@ -151,6 +151,30 @@ public sealed class JsonWordSearchSettingsWriterTests
     }
 
     [Fact]
+    public async Task RequiresQrSettingsWhenQrTemplateExists()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "brands", "demo", "page_qr.png"), "metadata only");
+            var reader = new JsonWordSearchSettingsReader();
+            var current = (await reader.ReadBrandAsync(
+                root,
+                "demo",
+                await reader.ReadGlobalAsync(root))).Settings;
+
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                new JsonWordSearchSettingsWriter(reader).SaveBrandAsync(root, "demo", current));
+
+            Assert.Equal("qr_settings_required", exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SavesMaximumKeywordLengthInGlobalSettings()
     {
         var root = CopyFixtureToTemporaryRoot();

@@ -21,21 +21,23 @@ public sealed record BrandValidationEntryDefinition(
 
 public static class BrandValidationDefinition
 {
-    public const int SchemaVersion = 3;
-    public const int AssetFingerprintFormatVersion = 2;
+    public const int SchemaVersion = 4;
+    public const int AssetFingerprintFormatVersion = 3;
     public const string PageLayoutKey = "page-layout";
     public const string FrontLayoutKey = "front-layout";
+    public const string QrPageKey = "qr-page";
     public const string FrontKey = "front";
     public const string BackKey = "back";
     public const string PageLayoutRelativePath = "page_layout.png";
     public const string FrontLayoutRelativePath = "front_layout.png";
+    public const string QrPageRelativePath = "page_qr.png";
     public const string FrontRelativePath = "front";
     public const string BackRelativePath = "back";
     public const int PageWidth = 2588;
     public const int PageHeight = 3375;
 
     public static readonly DateTimeOffset ChangedAtUtc =
-        new(2026, 10, 1, 5, 0, 0, TimeSpan.Zero);
+        new(2026, 10, 1, 10, 0, 0, TimeSpan.Zero);
 
     public static readonly IReadOnlyList<string> SupportedImageExtensions =
         [".jpeg", ".jpg", ".png"];
@@ -58,6 +60,14 @@ public static class BrandValidationDefinition
             Recursive: false,
             [".png"],
             [$"dimensions:{PageWidth}x{PageHeight}", "exists", "format:png", "readable"]),
+        new(
+            QrPageKey,
+            BrandValidationTargetKind.File,
+            QrPageRelativePath,
+            Required: false,
+            Recursive: false,
+            [".png"],
+            [$"dimensions:{PageWidth}x{PageHeight}", "format:png", "readable"]),
         new(
             FrontKey,
             BrandValidationTargetKind.Directory,

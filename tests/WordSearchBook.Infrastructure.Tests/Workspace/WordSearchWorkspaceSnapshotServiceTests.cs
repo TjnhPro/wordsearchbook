@@ -250,7 +250,8 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
         return destination;
     }
 
-    private static BrandValidationService CreateValidationService() => new(new JsonBrandValidationStateStore());
+    private static BrandValidationService CreateValidationService() =>
+        new(new JsonBrandValidationStateStore(), new JsonWordSearchSettingsReader());
 
     private static CsvBookDataValidationService CreateDataValidationService() =>
         new(new JsonBookDataValidationStateStore());

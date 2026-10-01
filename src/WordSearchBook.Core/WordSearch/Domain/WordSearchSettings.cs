@@ -33,6 +33,12 @@ public sealed record KeywordListSettings(
 
 public sealed record AnswerLineSettings(float Width, string Color);
 
+public sealed record QrPageSettings(
+    int X,
+    int Y,
+    int Size,
+    string DomainName);
+
 public sealed record GlobalWordSearchSettings(
     BoardSize Board,
     PageSize Page,
@@ -79,7 +85,8 @@ public sealed record BrandWordSearchSettings(
     TextRegionSettings BoardGame,
     KeywordListSettings KeywordList,
     AnchoredTextSettings PageNumber,
-    AnswerLineSettings AnswerLine);
+    AnswerLineSettings AnswerLine,
+    QrPageSettings? QrPage = null);
 
 public sealed record WordSearchSettingsBundle(
     GlobalWordSearchSettings Global,

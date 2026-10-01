@@ -67,9 +67,16 @@ public sealed class WordSearchWorkspaceSnapshotService(
             var brandId = Path.GetFileName(directory);
             var validation = await validationService.CheckStateAsync(rootPath, brandId, cancellationToken);
             var (assetFolders, assetIssue) = ReadAssetFolders(rootPath, brandId, validation.Status);
+            var qrPage = ReadQrPage(rootPath, brandId, validation.Status);
             if (global is null)
             {
-                results.Add(new WorkspaceBrand(brandId, null, validation, globalIssue ?? assetIssue, assetFolders));
+                results.Add(new WorkspaceBrand(
+                    brandId,
+                    null,
+                    validation,
+                    globalIssue ?? assetIssue,
+                    assetFolders,
+                    QrPage: qrPage));
                 continue;
             }
 
@@ -82,15 +89,37 @@ public sealed class WordSearchWorkspaceSnapshotService(
                     validation,
                     assetIssue,
                     assetFolders,
-                    settings.RequiresSave));
+                    settings.RequiresSave,
+                    settings.UpdateReasonCode,
+                    qrPage));
             }
             catch (WordSearchGenerationException exception)
             {
-                results.Add(new WorkspaceBrand(brandId, null, validation, Issue(exception), assetFolders));
+                results.Add(new WorkspaceBrand(
+                    brandId,
+                    null,
+                    validation,
+                    Issue(exception),
+                    assetFolders,
+                    QrPage: qrPage));
             }
         }
 
         return results;
+    }
+
+    private static WorkspaceBrandOptionalFile ReadQrPage(
+        string rootPath,
+        string brandId,
+        BrandValidationStatus status)
+    {
+        var path = BrandAssetDiscovery.ResolveQrPagePath(rootPath, brandId);
+        return new WorkspaceBrandOptionalFile(
+            BrandValidationDefinition.QrPageKey,
+            BrandValidationDefinition.QrPageRelativePath,
+            File.Exists(path),
+            ".png",
+            status);
     }
 
     private static (IReadOnlyList<WorkspaceBrandAssetFolder> Folders, WorkspaceIssue? Issue) ReadAssetFolders(
