@@ -83,7 +83,7 @@ Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tê
 
 Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Giới hạn Keyword hiển thị nằm ở `maximumKeywordLength` trong Global Settings (mặc định 13 ký tự, không tính khoảng trắng). Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
 
-`IWordSearchBookGenerationService` sinh board puzzle/answer, sau đó compose hai trang hoàn chỉnh từ `brands/{brand}/page_layout.png`. Layout bắt buộc là PNG `2588x3375`; thiếu file, sai kích thước hoặc không đọc được sẽ làm generation fail với error code ổn định thay vì dùng fallback.
+`IWordSearchBookGenerationService` sinh board puzzle/answer từ base `brands/{brand}/page_layout.png`. Với trang puzzle, `front_layout.png` được alpha-compose sau board, Topic, Keyword và page number; trang Answer không dùng foreground. Cả hai layout đều bắt buộc là PNG `2588x3375`; ảnh được vẽ pixel-to-pixel, không resize/downsample.
 
 Topic, Keyword và Word Search Key được chuẩn hóa thành chữ hoa khi đọc CSV. Topic dùng anchor X/Y; page number dùng số thứ tự Topic bắt đầu từ 1; keyword list dùng đúng 20 Keyword hiển thị theo column-major, 5 từ cho mỗi cột trong 4 cột. Mỗi text region hỗ trợ `Left`, `Center`, `Right`; X là anchor theo alignment và Y luôn là cạnh trên. Text vượt trang hoặc chạm keyword khác sẽ fail bằng `page_text_overflow`.
 
@@ -102,7 +102,7 @@ Core giữ contracts, validation và puzzle engine. Infrastructure chịu trách
 
 ## Desktop workspace
 
-Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books dùng master/detail `4/8`, tìm theo tên folder, validation CSV thủ công và hai tab Overview/Output; Brands tạo brand mặc định kèm layout trắng và hai folder optional `front/back`, tìm kiếm, chỉnh anchor/style và validation asset thủ công; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
+Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy application root cố định từ thư mục chứa executable. Đặt `brands/` và `input/` cạnh ứng dụng; nếu chưa có `settings.json`, ứng dụng tự tạo cấu hình mặc định với board `20x20` và page cố định `2588x3375`. Books dùng master/detail `4/8`, tìm theo tên folder, validation CSV thủ công và hai tab Overview/Output; Brands tạo brand mặc định kèm base trắng, foreground trong suốt và hai folder optional `front/back`, tìm kiếm, chỉnh anchor/style và validation asset thủ công; Tasks hiển thị queue; Settings lưu cấu hình bằng atomic save.
 
 Mỗi book lưu chứng nhận CSV tại `input/{book}/.workspace/data.validation.json`. Refresh chỉ so certificate với metadata; nút **Validate CSV** mới đọc nội dung, tính SHA-256 và tổng hợp lỗi theo dòng/topic. **Process** chỉ chạy khi CSV và Brand đang được chứng nhận, đồng thời khóa `data.csv` và đối chiếu lại content hash để phát hiện thay đổi ngay cả khi size/timestamp không đổi.
 
@@ -112,15 +112,16 @@ Process giữ các PNG puzzle/answer trong `.workspace/cache/{brand}`, xuất An
 brands/{brand}/
 ├─ settings.json
 ├─ page_layout.png
+├─ front_layout.png
 ├─ front/
 └─ back/
 ```
 
-Mỗi brand lưu một certificate chung tại `brands/{brand}/brand.validation.json`. `page_layout.png` luôn bắt buộc; `front/back` là optional và folder thiếu hoặc rỗng được bỏ qua. Khi có ảnh trực tiếp trong hai folder, chỉ `.png`, `.jpg`, `.jpeg` được theo dõi và từng ảnh phải đọc được ở đúng `2588x3375`; file khác và thư mục con không tham gia validation hay fingerprint.
+Mỗi brand lưu một certificate chung tại `brands/{brand}/brand.validation.json`. `page_layout.png` và `front_layout.png` luôn bắt buộc; `front/back` là các trang PDF optional và folder thiếu hoặc rỗng được bỏ qua. Khi có ảnh trực tiếp trong hai folder, chỉ `.png`, `.jpg`, `.jpeg` được theo dõi và từng ảnh phải đọc được ở đúng `2588x3375`; file khác và thư mục con không tham gia validation hay fingerprint. Brand cũ phải tự bổ sung `front_layout.png` rồi Validate brand; ứng dụng không tự sửa asset hiện có.
 
 Workspace startup chỉ liệt kê file, đọc metadata và so certificate; không decode ảnh. Kiểm tra format/dimensions chỉ chạy qua nút **Validate brand** trong background queue. Thêm, xóa, đổi tên hoặc thay đổi asset được theo dõi sẽ chuyển Brand sang `Needs validation`, và Generation bị chặn ở cả UI lẫn Core cho đến khi toàn Brand là `Validated`.
 
-Brand Detail cung cấp **Draw demo** để render một trang mẫu cố định bằng settings đã lưu vào `brands/{brand}/page_layout.preview.png`. Preview chạy trong background queue, không sửa `page_layout.png` hay certificate validation; **Open folder** mở trực tiếp thư mục brand để xem file kết quả ở kích thước đầy đủ.
+Brand Detail cung cấp **Draw demo** để render một trang puzzle mẫu với cả hai layout và settings đã lưu vào `brands/{brand}/page_layout.preview.png`. Preview chạy trong background queue, không sửa layout nguồn hay certificate validation; **Open folder** mở trực tiếp thư mục brand để xem file kết quả ở kích thước đầy đủ.
 
 Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Migration chỉ diễn ra trong memory; lần Save Brand tiếp theo ghi schema canonical gồm text anchor/alignment và bốn keyword column anchors.
 
