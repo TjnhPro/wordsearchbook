@@ -168,6 +168,13 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
                 "maximum_keyword_length_invalid",
                 "Maximum keyword length must be between 1 and 100 characters.");
         }
+
+        if (global.MaximumProcessingConcurrency is < 1 or > WordSearchSettingsDefaults.MaximumSupportedProcessingConcurrency)
+        {
+            throw new WordSearchGenerationException(
+                "maximum_processing_concurrency_invalid",
+                $"Maximum processing concurrency must be between 1 and {WordSearchSettingsDefaults.MaximumSupportedProcessingConcurrency}.");
+        }
     }
 
     internal static void ValidateBrand(GlobalWordSearchSettings global, BrandWordSearchSettings brand)

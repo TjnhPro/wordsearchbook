@@ -154,6 +154,53 @@ public sealed class BookProcessingServiceTests
         }
     }
 
+    [Fact]
+    public async Task ProcessesMultipleTopicsIntoOrderedCacheAnswersAndPdf()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var dataPath = Path.Combine(root, "input", "sample-book", "data.csv");
+            var lines = await File.ReadAllLinesAsync(dataPath);
+            var secondTopicRows = lines.Skip(1)
+                .Select(line => line
+                    .Replace("PUZ-001", "PUZ-002", StringComparison.Ordinal)
+                    .Replace(",Amazing Animals,", ",Ocean Life,", StringComparison.Ordinal))
+                .ToArray();
+            await File.WriteAllLinesAsync(dataPath, [lines[0], .. lines.Skip(1), .. secondTopicRows]);
+            SaveImage(Path.Combine(root, "brands", "demo", "page_layout.png"), Color.White);
+
+            using var services = BuildServices();
+            Assert.True((await services.GetRequiredService<IBookDataValidationService>()
+                .ValidateAsync(root, "sample-book")).IsSuccess);
+            Assert.True((await services.GetRequiredService<IBrandValidationService>()
+                .ValidateAsync(root, "demo")).IsSuccess);
+
+            var result = await services.GetRequiredService<IBookProcessingService>().ProcessAsync(
+                new BookProcessingRequest(root, "sample-book", "demo"));
+
+            Assert.Equal(2, result.PuzzlePageCount);
+            Assert.Equal([1, 2], result.Answers.Select(answer => answer.TopicIndex));
+            Assert.Equal(["answer/001.jpg", "answer/002.jpg"], result.Answers.Select(answer => answer.RelativePath));
+            using (var pdf = PdfReader.Open(result.PdfPath, PdfDocumentOpenMode.Import))
+            {
+                Assert.Equal(2, pdf.PageCount);
+            }
+
+            var cache = Path.Combine(root, "input", "sample-book", ".workspace", "cache");
+            Assert.True(File.Exists(Path.Combine(cache, "manifest.json")));
+            Assert.True(File.Exists(Path.Combine(cache, "topics", "001", "page.png")));
+            Assert.True(File.Exists(Path.Combine(cache, "topics", "002", "page.png")));
+            Assert.Equal(["topics"], Directory.EnumerateDirectories(cache).Select(Path.GetFileName));
+            Assert.False(Directory.Exists(Path.Combine(root, "input", "sample-book", ".workspace", "pdf-work")));
+            Assert.Empty(Directory.EnumerateFiles(Path.Combine(root, "input", "sample-book", "output"), "*.pending", SearchOption.AllDirectories));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ServiceProvider BuildServices()
     {
         var services = new ServiceCollection();

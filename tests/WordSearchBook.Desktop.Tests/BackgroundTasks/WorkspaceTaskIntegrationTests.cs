@@ -86,7 +86,7 @@ public sealed class WorkspaceTaskIntegrationTests
             var book = Assert.Single(processingResult!.Snapshot.Books);
             Assert.Contains("demo", book.CachedBrandIds);
             Assert.Equal(BookOutputStatus.Ready, book.Output!.Status);
-            Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", ".workspace", "cache", "demo", "manifest.json")));
+            Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", ".workspace", "cache", "manifest.json")));
             Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", "output", "sample-book.interior.pdf")));
             Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", "output", "answer", "001.jpg")));
         }

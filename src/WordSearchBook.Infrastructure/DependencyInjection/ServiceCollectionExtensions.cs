@@ -36,9 +36,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWordSearchPuzzleGenerator, WordSearchPuzzleGenerator>();
         services.AddSingleton<IWordSearchBoardRenderer, SystemDrawingWordSearchBoardRenderer>();
         services.AddSingleton<IWordSearchPageRenderer, SystemDrawingWordSearchPageRenderer>();
+        services.AddSingleton<IWordSearchTopicProcessor, WordSearchTopicProcessor>();
+        services.AddSingleton<IWordSearchTopicBatchProcessor, BoundedWordSearchTopicBatchProcessor>();
         services.AddSingleton<IBrandPagePreviewService, BrandPagePreviewService>();
         services.AddSingleton<IWordSearchCachePublisher, FileSystemWordSearchCachePublisher>();
         services.AddSingleton<IWordSearchBookGenerationService, WordSearchBookGenerationService>();
+        services.AddSingleton<IBookAnswerBatchExporter, SystemDrawingBookAnswerBatchExporter>();
+        services.AddSingleton<IBookInteriorPdfExporter, PdfSharpBookInteriorPdfExporter>();
+        services.AddSingleton<IBookOutputPublisher, FileSystemBookOutputPublisher>();
+        services.AddSingleton<IBookProcessingSessionGate, BookProcessingSessionGate>();
         services.AddSingleton<IBookProcessingService, BookProcessingService>();
         services.AddSingleton<IBookBrandAssignmentStore, JsonBookBrandAssignmentStore>();
         services.AddSingleton<IBookOutputSnapshotService, JsonBookOutputSnapshotService>();
