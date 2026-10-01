@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using WordSearchBook.Core.Application;
 using WordSearchBook.Infrastructure.DependencyInjection;
@@ -10,9 +11,13 @@ public sealed class ApplicationInfoProviderTests
     public void ReturnsReadyApplicationInformation()
     {
         var info = new ApplicationInfoProvider().GetCurrent();
+        var expectedVersion = typeof(ApplicationInfo).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
 
         Assert.Equal("Word Search Book", info.Name);
-        Assert.Equal("0.1.0", info.Version);
+        Assert.False(string.IsNullOrWhiteSpace(expectedVersion));
+        Assert.Equal(expectedVersion, info.Version);
         Assert.Equal("ready", info.Status);
     }
 
