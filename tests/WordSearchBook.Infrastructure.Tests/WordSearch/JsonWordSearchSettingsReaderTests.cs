@@ -53,6 +53,19 @@ public sealed class JsonWordSearchSettingsReaderTests
         Assert.Equal("#8B1E1E", settings.Brand.AnswerLine.Color);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(13)]
+    public void RejectsProcessingConcurrencyOutsideSupportedRange(int value)
+    {
+        var exception = Assert.Throws<WordSearchGenerationException>(() =>
+            JsonWordSearchSettingsReader.ValidateGlobal(
+                WordSearchSettingsDefaults.CreateGlobal() with { MaximumProcessingConcurrency = value }));
+
+        Assert.Equal("maximum_processing_concurrency_invalid", exception.Code);
+        Assert.Contains("between 1 and 12", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task RejectsBoardRectangleThatIsNotSquare()
     {

@@ -41,6 +41,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBrandPagePreviewService, BrandPagePreviewService>();
         services.AddSingleton<IWordSearchCachePublisher, FileSystemWordSearchCachePublisher>();
         services.AddSingleton<IWordSearchBookGenerationService, WordSearchBookGenerationService>();
+        services.AddSingleton<IBookAnswerBatchExporter, SystemDrawingBookAnswerBatchExporter>();
+        services.AddSingleton<IBookInteriorPdfExporter, PdfSharpBookInteriorPdfExporter>();
+        services.AddSingleton<IBookOutputPublisher, FileSystemBookOutputPublisher>();
+        services.AddSingleton<IBookProcessingSessionGate, BookProcessingSessionGate>();
         services.AddSingleton<IBookProcessingService, BookProcessingService>();
         services.AddSingleton<IBookBrandAssignmentStore, JsonBookBrandAssignmentStore>();
         services.AddSingleton<IBookOutputSnapshotService, JsonBookOutputSnapshotService>();

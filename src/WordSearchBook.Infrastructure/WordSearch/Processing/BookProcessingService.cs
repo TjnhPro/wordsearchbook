@@ -1,8 +1,3 @@
-using PdfSharp.Drawing;
-using PdfSharp.Pdf;
-using PdfSharp.Pdf.IO;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Security.Cryptography;
 using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Application;
@@ -16,15 +11,16 @@ public sealed class BookProcessingService(
     IWordSearchBookGenerationService generationService,
     IBookDataValidationService dataValidationService,
     IBrandValidationService brandValidationService,
-    IWordSearchSettingsReader settingsReader) : IBookProcessingService
+    IWordSearchSettingsReader settingsReader,
+    IBookAnswerBatchExporter answerExporter,
+    IBookInteriorPdfExporter pdfExporter,
+    IBookOutputPublisher outputPublisher,
+    IBookProcessingSessionGate sessionGate) : IBookProcessingService
 {
     private const int ManifestSchemaVersion = 1;
     private const int PageWidth = 2588;
     private const int PageHeight = 3375;
     private const int OutputDpi = 300;
-    private const long AnswerJpegQuality = 85L;
-    private const double PageWidthPoints = PageWidth * 72d / OutputDpi;
-    private const double PageHeightPoints = PageHeight * 72d / OutputDpi;
     private static readonly HashSet<string> SupportedImageExtensions =
         new([".png", ".jpg", ".jpeg"], StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -49,263 +45,195 @@ public sealed class BookProcessingService(
 
         var bookDirectory = ResolveChildDirectory(Path.Combine(rootPath, "input"), request.BookId, "book_not_found");
         var brandDirectory = ResolveChildDirectory(Path.Combine(rootPath, "brands"), request.BrandId, "brand_not_found");
-        var dataPath = Path.Combine(bookDirectory, "data.csv");
-        if (!File.Exists(dataPath))
-        {
-            throw new WordSearchGenerationException("input_not_found", $"CSV input was not found: {dataPath}");
-        }
-
-        var workspaceDirectory = Path.Combine(bookDirectory, ".workspace");
-        Directory.CreateDirectory(workspaceDirectory);
-        var stagingDirectory = Path.Combine(workspaceDirectory, $".output-staging-{Guid.NewGuid():N}");
-        var temporaryManifestPath = Path.Combine(workspaceDirectory, $".output-manifest-{Guid.NewGuid():N}.tmp");
-
-        try
-        {
-            progress?.Report(new BookProcessingProgress("Verifying certified input"));
-            await using var dataLock = new FileStream(
-                dataPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 128 * 1024,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var dataHash = $"sha256:{Convert.ToHexStringLower(await SHA256.HashDataAsync(dataLock, cancellationToken))}";
-            var globalSettings = await settingsReader.ReadGlobalAsync(rootPath, cancellationToken);
-            var dataState = await dataValidationService.CheckStateAsync(
-                rootPath,
-                request.BookId,
-                globalSettings.MaximumKeywordLength,
-                cancellationToken);
-            if (dataState.Status != BookDataValidationStatus.Validated ||
-                !string.Equals(dataState.ContentHash, dataHash, StringComparison.Ordinal))
-            {
-                throw new WordSearchGenerationException(
-                    "book_data_not_validated",
-                    "data.csv is not currently certified. Validate the CSV before processing.");
-            }
-
-            var brandState = await brandValidationService.CheckStateAsync(rootPath, request.BrandId, cancellationToken);
-            if (brandState.Status != BrandValidationStatus.Validated)
-            {
-                throw new WordSearchGenerationException(
-                    "brand_not_validated",
-                    $"Brand '{request.BrandId}' assets must be validated before processing.");
-            }
-
-            var settingsSignature = await CalculateSettingsSignatureAsync(rootPath, request.BrandId, cancellationToken);
-            progress?.Report(new BookProcessingProgress("Generating puzzle and answer pages"));
-            var generation = await generationService.GenerateAsync(
-                new WordSearchGenerationRequest(rootPath, request.BookId, request.BrandId),
-                cancellationToken,
-                new GenerationProgress(progress));
-
-            Directory.CreateDirectory(stagingDirectory);
-            var stagingAnswerDirectory = Path.Combine(stagingDirectory, "answer");
-            Directory.CreateDirectory(stagingAnswerDirectory);
-            var cacheDirectory = Path.GetDirectoryName(generation.ManifestPath)!;
-            var answers = new List<BookAnswerOutput>(generation.Topics.Count);
-            progress?.Report(new BookProcessingProgress("Exporting answer JPEG files", 0, generation.Topics.Count));
-            foreach (var topic in generation.Topics.OrderBy(topic => topic.Index))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var answerArtifact = topic.Artifacts.Single(artifact => artifact.Kind == WordSearchArtifactKind.PageAnswer);
-                var source = Path.Combine(cacheDirectory, answerArtifact.RelativePath);
-                var fileName = $"{topic.Index:000}.jpg";
-                var target = Path.Combine(stagingAnswerDirectory, fileName);
-                ExportAnswerJpeg(source, target);
-                var info = new FileInfo(target);
-                answers.Add(new BookAnswerOutput(
-                    topic.Index,
-                    $"answer/{fileName}",
-                    info.Length,
-                    PageWidth,
-                    PageHeight,
-                    (int)AnswerJpegQuality));
-                progress?.Report(new BookProcessingProgress(
-                    "Exporting answer JPEG files",
-                    answers.Count,
-                    generation.Topics.Count,
-                    topic.Name));
-            }
-
-            var frontPages = DiscoverOrderedPages(Path.Combine(brandDirectory, "front"));
-            var puzzlePages = generation.Topics
-                .OrderBy(topic => topic.Index)
-                .Select(topic => topic.Artifacts.Single(artifact => artifact.Kind == WordSearchArtifactKind.Page))
-                .Select(artifact => Path.Combine(cacheDirectory, artifact.RelativePath))
-                .ToArray();
-            var backPages = DiscoverOrderedPages(Path.Combine(brandDirectory, "back"));
-            var orderedPdfPages = frontPages.Concat(puzzlePages).Concat(backPages).ToArray();
-            var pdfFileName = $"{request.BookId}.interior.pdf";
-            var stagingPdfPath = Path.Combine(stagingDirectory, pdfFileName);
-            progress?.Report(new BookProcessingProgress("Assembling interior PDF", 0, orderedPdfPages.Length));
-            WritePdf(stagingPdfPath, orderedPdfPages, progress, cancellationToken);
-            VerifyPdf(stagingPdfPath, orderedPdfPages.Length);
-
-            progress?.Report(new BookProcessingProgress("Verifying output"));
-            var currentBrandState = await brandValidationService.CheckStateAsync(rootPath, request.BrandId, cancellationToken);
-            if (currentBrandState.Status != BrandValidationStatus.Validated ||
-                !string.Equals(currentBrandState.Fingerprint, brandState.Fingerprint, StringComparison.Ordinal))
-            {
-                throw new WordSearchGenerationException(
-                    "brand_changed_during_processing",
-                    "Brand assets changed while the book was being processed.");
-            }
-
-            var currentSettingsSignature = await CalculateSettingsSignatureAsync(rootPath, request.BrandId, cancellationToken);
-            if (!string.Equals(currentSettingsSignature, settingsSignature, StringComparison.Ordinal))
-            {
-                throw new WordSearchGenerationException(
-                    "settings_changed_during_processing",
-                    "Settings changed while the book was being processed.");
-            }
-
-            var processedAt = DateTimeOffset.UtcNow;
-            var pdfInfo = new FileInfo(stagingPdfPath);
-            var manifest = new OutputManifest(
-                ManifestSchemaVersion,
-                request.BookId,
-                request.BrandId,
-                dataHash,
-                brandState.Fingerprint!,
-                settingsSignature,
-                processedAt,
-                generation.Topics.Count,
-                frontPages.Count,
-                backPages.Count,
-                new PdfManifest(pdfFileName, pdfInfo.Length, orderedPdfPages.Length, PageWidth, PageHeight, OutputDpi),
-                answers);
-            await WriteManifestAsync(temporaryManifestPath, manifest, cancellationToken);
-
-            progress?.Report(new BookProcessingProgress("Publishing output"));
-            var outputDirectory = Path.Combine(bookDirectory, "output");
-            var manifestPath = Path.Combine(workspaceDirectory, "output.manifest.json");
-            PublishAtomically(stagingDirectory, outputDirectory, temporaryManifestPath, manifestPath);
-
-            return new BookProcessingResult(
-                request.BookId,
-                request.BrandId,
-                Path.Combine(outputDirectory, pdfFileName),
-                Path.Combine(outputDirectory, "answer"),
-                generation.Topics.Count,
-                frontPages.Count,
-                backPages.Count,
-                orderedPdfPages.Length,
-                pdfInfo.Length,
-                answers,
-                processedAt);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (WordSearchGenerationException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        var lease = await sessionGate.TryAcquireAsync($"{rootPath}|{request.BookId}", cancellationToken);
+        if (lease is null)
         {
             throw new WordSearchGenerationException(
-                "book_processing_failed",
-                $"Book processing failed: {exception.Message}",
-                exception);
-        }
-        finally
-        {
-            TryDeleteDirectory(stagingDirectory);
-            TryDeleteFile(temporaryManifestPath);
-        }
-    }
-
-    private static void ExportAnswerJpeg(string sourcePath, string targetPath)
-    {
-        using var source = Image.FromFile(sourcePath);
-        if (source.Width != PageWidth || source.Height != PageHeight)
-        {
-            throw new InvalidDataException($"Answer page must be {PageWidth} x {PageHeight} pixels: {sourcePath}");
+                "book_processing_already_running",
+                $"Book '{request.BookId}' is already being processed.");
         }
 
-        using (var output = new Bitmap(PageWidth, PageHeight, PixelFormat.Format24bppRgb))
+        await using (lease)
         {
-            output.SetResolution(OutputDpi, OutputDpi);
-            using var graphics = Graphics.FromImage(output);
-            graphics.Clear(Color.White);
-            graphics.DrawImageUnscaled(source, 0, 0);
-            var codec = ImageCodecInfo.GetImageEncoders().Single(encoder => encoder.FormatID == ImageFormat.Jpeg.Guid);
-            using var parameters = new EncoderParameters(1);
-            parameters.Param[0] = new EncoderParameter(Encoder.Quality, AnswerJpegQuality);
-            output.Save(targetPath, codec, parameters);
+            return await ProcessCoreAsync();
         }
 
-        using var verification = Image.FromFile(targetPath);
-        if (verification.RawFormat.Guid != ImageFormat.Jpeg.Guid ||
-            verification.Width != PageWidth ||
-            verification.Height != PageHeight)
+        async Task<BookProcessingResult> ProcessCoreAsync()
         {
-            throw new InvalidDataException($"Answer JPEG did not pass output verification: {targetPath}");
-        }
-    }
-
-    private static void WritePdf(
-        string targetPath,
-        IReadOnlyList<string> pages,
-        IProgress<BookProcessingProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        if (pages.Count == 0)
-        {
-            throw new InvalidDataException("At least one puzzle page is required for PDF export.");
-        }
-
-        using var document = new PdfDocument();
-        for (var index = 0; index < pages.Count; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var sourcePath = pages[index];
-            using var image = XImage.FromFile(sourcePath);
-            if (image.PixelWidth != PageWidth || image.PixelHeight != PageHeight)
+            var dataPath = Path.Combine(bookDirectory, "data.csv");
+            if (!File.Exists(dataPath))
             {
-                throw new InvalidDataException($"PDF source page must be {PageWidth} x {PageHeight} pixels: {sourcePath}");
+                throw new WordSearchGenerationException("input_not_found", $"CSV input was not found: {dataPath}");
             }
 
-            var page = document.AddPage();
-            page.Width = XUnit.FromPoint(PageWidthPoints);
-            page.Height = XUnit.FromPoint(PageHeightPoints);
-            using var graphics = XGraphics.FromPdfPage(page);
-            graphics.DrawImage(image, 0, 0, PageWidthPoints, PageHeightPoints);
-            progress?.Report(new BookProcessingProgress("Assembling interior PDF", index + 1, pages.Count));
-        }
+            var workspaceDirectory = Path.Combine(bookDirectory, ".workspace");
+            var outputDirectory = Path.Combine(bookDirectory, "output");
+            var answerDirectory = Path.Combine(outputDirectory, "answer");
+            var pdfFileName = $"{request.BookId}.interior.pdf";
+            var finalPdfPath = Path.Combine(outputDirectory, pdfFileName);
+            var pendingPdfPath = Path.Combine(outputDirectory, $".{pdfFileName}.pending");
+            var pdfWorkDirectory = Path.Combine(workspaceDirectory, "pdf-work");
+            var manifestPath = Path.Combine(workspaceDirectory, "output.manifest.json");
+            var pendingManifestPath = Path.Combine(workspaceDirectory, "output.manifest.pending.json");
+            Directory.CreateDirectory(workspaceDirectory);
+            CleanupPendingFiles(pendingPdfPath, pendingManifestPath, answerDirectory);
 
-        cancellationToken.ThrowIfCancellationRequested();
-        document.Save(targetPath);
-    }
-
-    private static void VerifyPdf(string path, int expectedPageCount)
-    {
-        using var document = PdfReader.Open(path, PdfDocumentOpenMode.Import);
-        if (document.PageCount != expectedPageCount)
-        {
-            throw new InvalidDataException($"Interior PDF contains {document.PageCount} pages; expected {expectedPageCount}.");
-        }
-
-        foreach (var page in document.Pages)
-        {
-            if (Math.Abs(page.Width.Point - PageWidthPoints) > 0.01 ||
-                Math.Abs(page.Height.Point - PageHeightPoints) > 0.01)
+            try
             {
-                throw new InvalidDataException("Interior PDF contains a page with invalid physical dimensions.");
+                progress?.Report(new BookProcessingProgress("Verifying certified input"));
+                await using var dataLock = new FileStream(
+                    dataPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 128 * 1024,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                var dataHash = $"sha256:{Convert.ToHexStringLower(await SHA256.HashDataAsync(dataLock, cancellationToken))}";
+                var globalSettings = await settingsReader.ReadGlobalAsync(rootPath, cancellationToken);
+                var dataState = await dataValidationService.CheckStateAsync(
+                    rootPath,
+                    request.BookId,
+                    globalSettings.MaximumKeywordLength,
+                    cancellationToken);
+                if (dataState.Status != BookDataValidationStatus.Validated ||
+                    !string.Equals(dataState.ContentHash, dataHash, StringComparison.Ordinal))
+                {
+                    throw new WordSearchGenerationException(
+                        "book_data_not_validated",
+                        "data.csv is not currently certified. Validate the CSV before processing.");
+                }
+
+                var brandState = await brandValidationService.CheckStateAsync(rootPath, request.BrandId, cancellationToken);
+                if (brandState.Status != BrandValidationStatus.Validated)
+                {
+                    throw new WordSearchGenerationException(
+                        "brand_not_validated",
+                        $"Brand '{request.BrandId}' assets must be validated before processing.");
+                }
+
+                var settingsSignature = await CalculateSettingsSignatureAsync(rootPath, request.BrandId, cancellationToken);
+                progress?.Report(new BookProcessingProgress("Generating topics", 0, dataState.TopicCount));
+                var generation = await generationService.GenerateAsync(
+                    new WordSearchGenerationRequest(rootPath, request.BookId, request.BrandId),
+                    cancellationToken,
+                    new GenerationProgress(progress));
+                var cacheDirectory = Path.GetDirectoryName(generation.ManifestPath)!;
+                Directory.CreateDirectory(outputDirectory);
+                Directory.CreateDirectory(answerDirectory);
+                var preparedAnswers = await answerExporter.PrepareAsync(
+                    cacheDirectory,
+                    generation.Topics,
+                    outputDirectory,
+                    globalSettings.MaximumProcessingConcurrency,
+                    progress,
+                    cancellationToken);
+
+                var frontPages = DiscoverOrderedPages(Path.Combine(brandDirectory, "front"));
+                var puzzlePages = generation.Topics
+                    .OrderBy(topic => topic.Index)
+                    .Select(topic => topic.Artifacts.Single(artifact => artifact.Kind == WordSearchArtifactKind.Page))
+                    .Select(artifact => Path.Combine(cacheDirectory, artifact.RelativePath))
+                    .ToArray();
+                var backPages = DiscoverOrderedPages(Path.Combine(brandDirectory, "back"));
+                var orderedPdfPages = frontPages.Concat(puzzlePages).Concat(backPages).ToArray();
+                var preparedPdf = await pdfExporter.PrepareAsync(
+                    orderedPdfPages,
+                    pdfWorkDirectory,
+                    pendingPdfPath,
+                    finalPdfPath,
+                    globalSettings.MaximumProcessingConcurrency,
+                    progress,
+                    cancellationToken);
+
+                progress?.Report(new BookProcessingProgress("Verifying output"));
+                var currentBrandState = await brandValidationService.CheckStateAsync(rootPath, request.BrandId, cancellationToken);
+                if (currentBrandState.Status != BrandValidationStatus.Validated ||
+                    !string.Equals(currentBrandState.Fingerprint, brandState.Fingerprint, StringComparison.Ordinal))
+                {
+                    throw new WordSearchGenerationException(
+                        "brand_changed_during_processing",
+                        "Brand assets changed while the book was being processed.");
+                }
+
+                var currentSettingsSignature = await CalculateSettingsSignatureAsync(rootPath, request.BrandId, cancellationToken);
+                if (!string.Equals(currentSettingsSignature, settingsSignature, StringComparison.Ordinal))
+                {
+                    throw new WordSearchGenerationException(
+                        "settings_changed_during_processing",
+                        "Settings changed while the book was being processed.");
+                }
+
+                var processedAt = DateTimeOffset.UtcNow;
+                var answers = preparedAnswers.Select(answer => answer.Output).ToArray();
+                var manifest = new OutputManifest(
+                    ManifestSchemaVersion,
+                    request.BookId,
+                    request.BrandId,
+                    dataHash,
+                    brandState.Fingerprint!,
+                    settingsSignature,
+                    processedAt,
+                    generation.Topics.Count,
+                    frontPages.Count,
+                    backPages.Count,
+                    new PdfManifest(
+                        pdfFileName,
+                        preparedPdf.LengthBytes,
+                        preparedPdf.PageCount,
+                        PageWidth,
+                        PageHeight,
+                        OutputDpi),
+                    answers);
+                await WriteManifestAsync(pendingManifestPath, manifest, cancellationToken);
+
+                progress?.Report(new BookProcessingProgress("Publishing output"));
+                await outputPublisher.PublishAsync(
+                    new BookOutputPublicationRequest(
+                        outputDirectory,
+                        preparedPdf,
+                        preparedAnswers,
+                        pendingManifestPath,
+                        manifestPath),
+                    cancellationToken);
+
+                return new BookProcessingResult(
+                    request.BookId,
+                    request.BrandId,
+                    finalPdfPath,
+                    answerDirectory,
+                    generation.Topics.Count,
+                    frontPages.Count,
+                    backPages.Count,
+                    preparedPdf.PageCount,
+                    preparedPdf.LengthBytes,
+                    answers,
+                    processedAt);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (WordSearchGenerationException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+            {
+                throw new WordSearchGenerationException(
+                    "book_processing_failed",
+                    $"Book processing failed: {exception.Message}",
+                    exception);
+            }
+            finally
+            {
+                CleanupPendingFiles(pendingPdfPath, pendingManifestPath, answerDirectory);
             }
         }
     }
 
     private static IReadOnlyList<string> DiscoverOrderedPages(string directory)
     {
-        if (!Directory.Exists(directory))
-        {
-            return [];
-        }
-
+        if (!Directory.Exists(directory)) return [];
         return Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
             .Where(path => SupportedImageExtensions.Contains(Path.GetExtension(path)))
             .OrderBy(Path.GetFileName, NaturalFileNameComparer.Instance)
@@ -336,48 +264,15 @@ public sealed class BookProcessingService(
         OutputManifest manifest,
         CancellationToken cancellationToken)
     {
-        await using var stream = File.Create(path);
+        await using var stream = new FileStream(
+            path,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            64 * 1024,
+            FileOptions.Asynchronous | FileOptions.WriteThrough);
         await JsonSerializer.SerializeAsync(stream, manifest, JsonOptions, cancellationToken);
         await stream.FlushAsync(cancellationToken);
-    }
-
-    private static void PublishAtomically(
-        string stagingDirectory,
-        string outputDirectory,
-        string temporaryManifestPath,
-        string manifestPath)
-    {
-        var backupDirectory = $"{outputDirectory}.backup-{Guid.NewGuid():N}";
-        var hadPreviousOutput = Directory.Exists(outputDirectory);
-        if (hadPreviousOutput)
-        {
-            Directory.Move(outputDirectory, backupDirectory);
-        }
-
-        var published = false;
-        try
-        {
-            Directory.Move(stagingDirectory, outputDirectory);
-            File.Move(temporaryManifestPath, manifestPath, overwrite: true);
-            published = true;
-        }
-        finally
-        {
-            if (!published)
-            {
-                if (Directory.Exists(outputDirectory) && !Directory.Exists(stagingDirectory))
-                {
-                    Directory.Move(outputDirectory, stagingDirectory);
-                }
-
-                if (hadPreviousOutput && Directory.Exists(backupDirectory) && !Directory.Exists(outputDirectory))
-                {
-                    Directory.Move(backupDirectory, outputDirectory);
-                }
-            }
-        }
-
-        TryDeleteDirectory(backupDirectory);
     }
 
     private static string ResolveChildDirectory(string parent, string child, string errorCode)
@@ -409,18 +304,17 @@ public sealed class BookProcessingService(
         }
     }
 
-    private static void TryDeleteDirectory(string path)
+    private static void CleanupPendingFiles(
+        string pendingPdfPath,
+        string pendingManifestPath,
+        string answerDirectory)
     {
-        try
+        TryDeleteFile(pendingPdfPath);
+        TryDeleteFile(pendingManifestPath);
+        if (!Directory.Exists(answerDirectory)) return;
+        foreach (var pendingAnswer in Directory.EnumerateFiles(answerDirectory, ".*.pending", SearchOption.TopDirectoryOnly))
         {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // Unpublished staging/backup data can be cleaned by a later run.
+            TryDeleteFile(pendingAnswer);
         }
     }
 
@@ -428,14 +322,11 @@ public sealed class BookProcessingService(
     {
         try
         {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            if (File.Exists(path)) File.Delete(path);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Unpublished temporary data can be cleaned by a later run.
+            // A later run retries the same stable pending path.
         }
     }
 

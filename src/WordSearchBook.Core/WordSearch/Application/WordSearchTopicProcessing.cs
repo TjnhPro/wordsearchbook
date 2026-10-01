@@ -127,6 +127,19 @@ public sealed class BoundedWordSearchTopicBatchProcessor(IWordSearchTopicProcess
                 var count = Interlocked.Increment(ref completed);
                 progress?.Report(new WordSearchGenerationProgress(count, topics.Count, topic.Index, topic.Name));
             }
+            catch (OperationCanceledException)
+            {
+                await remainingWorkCancellation.CancelAsync();
+                throw;
+            }
+            catch (WordSearchGenerationException exception)
+            {
+                await remainingWorkCancellation.CancelAsync();
+                throw new WordSearchGenerationException(
+                    exception.Code,
+                    $"Topic {topic.Index} '{topic.Name}': {exception.Message}",
+                    exception);
+            }
             catch
             {
                 await remainingWorkCancellation.CancelAsync();
