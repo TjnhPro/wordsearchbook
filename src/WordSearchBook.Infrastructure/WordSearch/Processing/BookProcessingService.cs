@@ -13,11 +13,12 @@ public sealed class BookProcessingService(
     IBrandValidationService brandValidationService,
     IWordSearchSettingsReader settingsReader,
     IBookAnswerBatchExporter answerExporter,
+    IBookQrPageRenderer qrPageRenderer,
     IBookInteriorPdfExporter pdfExporter,
     IBookOutputPublisher outputPublisher,
     IBookProcessingSessionGate sessionGate) : IBookProcessingService
 {
-    private const int ManifestSchemaVersion = 1;
+    private const int ManifestSchemaVersion = 2;
     private const int PageWidth = 2588;
     private const int PageHeight = 3375;
     private const int OutputDpi = 300;
@@ -111,6 +112,8 @@ public sealed class BookProcessingService(
                         $"Brand '{request.BrandId}' assets must be validated before processing.");
                 }
 
+                var settings = await settingsReader.ReadAsync(rootPath, request.BrandId, cancellationToken);
+
                 var settingsSignature = await CalculateSettingsSignatureAsync(rootPath, request.BrandId, cancellationToken);
                 progress?.Report(new BookProcessingProgress("Generating topics", 0, dataState.TopicCount));
                 var generation = await generationService.GenerateAsync(
@@ -135,7 +138,34 @@ public sealed class BookProcessingService(
                     .Select(artifact => Path.Combine(cacheDirectory, artifact.RelativePath))
                     .ToArray();
                 var backPages = DiscoverOrderedPages(Path.Combine(brandDirectory, "back"));
-                var orderedPdfPages = frontPages.Concat(puzzlePages).Concat(backPages).ToArray();
+                var qrTemplatePath = Path.Combine(brandDirectory, BrandValidationDefinition.QrPageRelativePath);
+                var qrCachePath = Path.Combine(cacheDirectory, "page-qr.png");
+                IReadOnlyList<string> qrPages;
+                if (File.Exists(qrTemplatePath))
+                {
+                    var qrSettings = settings.Brand.QrPage ?? throw new WordSearchGenerationException(
+                        "qr_settings_required",
+                        "QR Page settings are required while page_qr.png is present.");
+                    progress?.Report(new BookProcessingProgress("Generating QR page"));
+                    var qrPage = await qrPageRenderer.RenderAsync(
+                        qrTemplatePath,
+                        qrCachePath,
+                        request.BookId,
+                        qrSettings,
+                        cancellationToken);
+                    qrPages = [qrPage.Path];
+                }
+                else
+                {
+                    TryDeleteFile(qrCachePath);
+                    qrPages = [];
+                }
+
+                var orderedPdfPages = frontPages
+                    .Concat(puzzlePages)
+                    .Concat(backPages)
+                    .Concat(qrPages)
+                    .ToArray();
                 var preparedPdf = await pdfExporter.PrepareAsync(
                     orderedPdfPages,
                     pdfWorkDirectory,
@@ -176,6 +206,7 @@ public sealed class BookProcessingService(
                     generation.Topics.Count,
                     frontPages.Count,
                     backPages.Count,
+                    qrPages.Count,
                     new PdfManifest(
                         pdfFileName,
                         preparedPdf.LengthBytes,
@@ -204,6 +235,7 @@ public sealed class BookProcessingService(
                     generation.Topics.Count,
                     frontPages.Count,
                     backPages.Count,
+                    qrPages.Count,
                     preparedPdf.PageCount,
                     preparedPdf.LengthBytes,
                     answers,
@@ -359,6 +391,7 @@ public sealed class BookProcessingService(
         int PuzzlePageCount,
         int FrontPageCount,
         int BackPageCount,
+        int QrPageCount,
         PdfManifest Pdf,
         IReadOnlyList<BookAnswerOutput> Answers);
 

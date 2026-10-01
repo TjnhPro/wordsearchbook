@@ -22,6 +22,7 @@ public sealed record WorkspaceBookOutput(
     int PuzzlePageCount = 0,
     int FrontPageCount = 0,
     int BackPageCount = 0,
+    int QrPageCount = 0,
     int PdfPageCount = 0,
     int AnswerCount = 0,
     long AnswerLengthBytes = 0,

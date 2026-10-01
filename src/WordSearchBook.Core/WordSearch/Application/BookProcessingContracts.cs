@@ -27,6 +27,7 @@ public sealed record BookProcessingResult(
     int PuzzlePageCount,
     int FrontPageCount,
     int BackPageCount,
+    int QrPageCount,
     int PdfPageCount,
     long PdfLengthBytes,
     IReadOnlyList<BookAnswerOutput> Answers,

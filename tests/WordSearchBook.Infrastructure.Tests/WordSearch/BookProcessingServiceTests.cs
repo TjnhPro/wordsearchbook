@@ -5,6 +5,8 @@ using System.Drawing.Imaging;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Contracts;
+using WordSearchBook.Core.WordSearch.Domain;
+using WordSearchBook.Core.WordSearch.Settings;
 using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.DependencyInjection;
 using WordSearchBook.Infrastructure.WordSearch.Processing;
@@ -202,6 +204,64 @@ public sealed class BookProcessingServiceTests
             Assert.Equal(["topics"], Directory.EnumerateDirectories(cache).Select(Path.GetFileName));
             Assert.False(Directory.Exists(Path.Combine(root, "input", "sample-book", ".workspace", "pdf-work")));
             Assert.Empty(Directory.EnumerateFiles(Path.Combine(root, "input", "sample-book", "output"), "*.pending", SearchOption.AllDirectories));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AppendsOptionalQrPageAndRemovesStaleQrCacheWhenTemplateIsRemoved()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            using var services = BuildServices();
+            var settingsReader = services.GetRequiredService<IWordSearchSettingsReader>();
+            var settingsWriter = services.GetRequiredService<IWordSearchSettingsWriter>();
+            var current = await settingsReader.ReadAsync(root, "demo");
+            var qrTemplatePath = Path.Combine(root, "brands", "demo", "page_qr.png");
+            SaveImage(qrTemplatePath, Color.LightPink);
+            await settingsWriter.SaveBrandAsync(
+                root,
+                "demo",
+                current.Brand with { QrPage = new QrPageSettings(300, 400, 600, "Example.COM") });
+            Assert.True((await services.GetRequiredService<IBookDataValidationService>()
+                .ValidateAsync(root, "sample-book")).IsSuccess);
+            Assert.True((await services.GetRequiredService<IBrandValidationService>()
+                .ValidateAsync(root, "demo")).IsSuccess);
+
+            var processingService = services.GetRequiredService<IBookProcessingService>();
+            var result = await processingService.ProcessAsync(new BookProcessingRequest(root, "sample-book", "demo"));
+
+            Assert.Equal(1, result.QrPageCount);
+            Assert.Equal(2, result.PdfPageCount);
+            var qrCachePath = Path.Combine(root, "input", "sample-book", ".workspace", "cache", "page-qr.png");
+            Assert.True(File.Exists(qrCachePath));
+            using (var qrPage = new Bitmap(qrCachePath))
+            {
+                Assert.Equal(Color.LightPink.ToArgb(), qrPage.GetPixel(20, 20).ToArgb());
+            }
+
+            var manifestPath = Path.Combine(root, "input", "sample-book", ".workspace", "output.manifest.json");
+            using (var manifest = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath)))
+            {
+                Assert.Equal(2, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
+                Assert.Equal(1, manifest.RootElement.GetProperty("qrPageCount").GetInt32());
+            }
+
+            File.Delete(qrTemplatePath);
+            current = await settingsReader.ReadAsync(root, "demo");
+            await settingsWriter.SaveBrandAsync(root, "demo", current.Brand with { QrPage = null });
+            Assert.True((await services.GetRequiredService<IBrandValidationService>()
+                .ValidateAsync(root, "demo")).IsSuccess);
+
+            result = await processingService.ProcessAsync(new BookProcessingRequest(root, "sample-book", "demo"));
+
+            Assert.Equal(0, result.QrPageCount);
+            Assert.Equal(1, result.PdfPageCount);
+            Assert.False(File.Exists(qrCachePath));
         }
         finally
         {

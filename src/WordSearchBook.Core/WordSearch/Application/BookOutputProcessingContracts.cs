@@ -2,6 +2,8 @@ using WordSearchBook.Core.WordSearch.Contracts;
 
 namespace WordSearchBook.Core.WordSearch.Application;
 
+using WordSearchBook.Core.WordSearch.Domain;
+
 public sealed record PreparedBookAnswer(
     BookAnswerOutput Output,
     string PendingPath,
@@ -12,6 +14,22 @@ public sealed record PreparedInteriorPdf(
     string FinalPath,
     long LengthBytes,
     int PageCount);
+
+public sealed record RenderedBookQrPage(
+    string Path,
+    string Url,
+    int Width,
+    int Height);
+
+public interface IBookQrPageRenderer
+{
+    Task<RenderedBookQrPage> RenderAsync(
+        string templatePath,
+        string outputPath,
+        string bookFolderName,
+        QrPageSettings settings,
+        CancellationToken cancellationToken = default);
+}
 
 public interface IBookAnswerBatchExporter
 {

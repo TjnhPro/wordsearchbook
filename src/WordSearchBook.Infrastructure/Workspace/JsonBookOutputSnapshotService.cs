@@ -8,7 +8,7 @@ namespace WordSearchBook.Infrastructure.Workspace;
 
 public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
 {
-    private const int ManifestSchemaVersion = 1;
+    private const int ManifestSchemaVersion = 2;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false
@@ -124,6 +124,7 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
         manifest.PuzzlePageCount,
         manifest.FrontPageCount,
         manifest.BackPageCount,
+        manifest.QrPageCount,
         manifest.Pdf.PageCount,
         manifest.Answers.Count,
         manifest.Answers.Sum(answer => answer.LengthBytes),
@@ -200,6 +201,7 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
         int PuzzlePageCount,
         int FrontPageCount,
         int BackPageCount,
+        int QrPageCount,
         PdfManifest Pdf,
         IReadOnlyList<BookAnswerOutput> Answers);
 }
