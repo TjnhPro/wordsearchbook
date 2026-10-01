@@ -46,6 +46,12 @@ function filterBooks(books, query) {
   const normalized = String(query ?? "").trim().toLocaleLowerCase();
   return normalized ? books.filter(book => book.id.toLocaleLowerCase().includes(normalized)) : books;
 }
+function bookValidationFailureContext(failure) {
+  const context = [];
+  if (failure?.sourceRow) context.push(`Row ${failure.sourceRow}`);
+  if (failure?.topic) context.push(String(failure.topic));
+  return context.join(" · ") || "CSV";
+}
 function formatBytes(value) {
   const bytes = Number(value ?? 0);
   if (!Number.isFinite(bytes) || bytes <= 0) return "—";
@@ -160,7 +166,7 @@ function renderBooks() {
     ? state.bookValidationFeedback.failures ?? []
     : dataValidation.failures ?? [];
   const failureRows = validationFeedback.length
-    ? `<div class="book-validation-errors"><h4>Validation issues</h4><ul>${validationFeedback.map(failure => `<li><span>${failure.sourceRow ? `Row ${failure.sourceRow}` : failure.topic ?? "CSV"}</span><p>${escapeHtml(failure.message)}</p></li>`).join("")}</ul></div>`
+    ? `<div class="book-validation-errors"><h4>Validation issues</h4><ul>${validationFeedback.map(failure => `<li><span>${escapeHtml(bookValidationFailureContext(failure))}</span><p>${escapeHtml(failure.message)}</p></li>`).join("")}</ul></div>`
     : "";
   const topics = dataValidation.topics ?? [];
   const topicRows = topics.length
@@ -861,6 +867,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
+const api = { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

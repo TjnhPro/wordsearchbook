@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -194,6 +194,12 @@ test("maps CSV and output lifecycle states to stable badges", () => {
   assert.deepEqual(bookDataValidationPresentation({ status: "Validated" }), { label: "Validated", tone: "good" });
   assert.deepEqual(bookOutputPresentation({ status: "Ready" }), { label: "Ready", tone: "good" });
   assert.deepEqual(bookOutputPresentation({ status: "Stale" }), { label: "Stale", tone: "warn" });
+});
+
+test("formats CSV validation context with row and topic", () => {
+  assert.equal(bookValidationFailureContext({ sourceRow: 12, topic: "BREATHING" }), "Row 12 · BREATHING");
+  assert.equal(bookValidationFailureContext({ topic: "BREATHING" }), "BREATHING");
+  assert.equal(bookValidationFailureContext({}), "CSV");
 });
 
 test("debounces brand search and applies only the latest query", () => {
