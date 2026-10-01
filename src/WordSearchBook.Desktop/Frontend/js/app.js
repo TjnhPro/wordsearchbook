@@ -196,7 +196,7 @@ function renderTasks() {
     const tone = task.state === "Completed" ? "good" : task.state === "Failed" ? "bad" : active ? "warn" : "neutral";
     return `<tr><td>${escapeHtml(task.kind)}</td><td>${escapeHtml(task.subject ?? "—")}</td><td>${badge(task.state, tone)}</td><td>${escapeHtml(task.step ?? "—")}</td><td>${escapeHtml(task.errorMessage ?? "—")}</td><td>${active ? `<button class="button-link" data-action="cancel-task" data-task-id="${escapeHtml(task.taskId)}">Cancel</button>` : ""}</td></tr>`;
   }).join("");
-  return `<section class="panel"><div class="panel-header"><div><h3>Task history</h3><p>Latest activity first</p></div><button class="button-secondary" data-action="list-tasks">Refresh</button></div><div class="table-scroll"><table><thead><tr><th>Kind</th><th>Subject</th><th>State</th><th>Step</th><th>Error</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  return `<section class="panel task-history-panel"><div class="panel-header"><div><h3>Task history</h3><p>Latest activity first</p></div><button class="button-secondary" data-action="list-tasks">Refresh</button></div><div class="table-scroll task-history-scroll"><table><thead><tr><th>Kind</th><th>Subject</th><th>State</th><th>Step</th><th>Error</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
 function settingInput(name, label, value, type = "number", extra = "") {
@@ -354,7 +354,7 @@ function brandSettingsValue(data) {
 function routeMarkup(routeName) {
   const route = routeDefinitions[routeName];
   const body = routeName === "books" ? renderBooks() : routeName === "brands" ? renderBrands() : routeName === "tasks" ? renderTasks() : renderSettings();
-  return `<section class="route-page ${routeName === "brands" || routeName === "books" ? "route-page-fill" : ""}"><h2 class="page-heading">${route.heading}</h2><p class="page-copy">${route.copy}</p><div class="route-body">${body}</div></section>`;
+  return `<section class="route-page ${routeName === "brands" || routeName === "books" || routeName === "tasks" ? "route-page-fill" : ""}"><h2 class="page-heading">${route.heading}</h2><p class="page-copy">${route.copy}</p><div class="route-body">${body}</div></section>`;
 }
 
 function activateRoute(routeName, { contentElement, titleElement, navigationItems = [] }) {
