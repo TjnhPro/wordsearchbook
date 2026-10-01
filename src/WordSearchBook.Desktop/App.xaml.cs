@@ -21,6 +21,7 @@ public partial class App : Application
         services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
         services.AddSingleton<IApplicationRootProvider, ExecutableApplicationRootProvider>();
         services.AddSingleton<IBrandFolderActionService, BrandFolderActionService>();
+        services.AddSingleton<IBookOutputFolderActionService, BookOutputFolderActionService>();
         services.AddSingleton<ApplicationCloseCoordinator>();
         services.AddSingleton<WebViewBridgeRouter>();
         services.AddSingleton<MainWindow>();

@@ -20,9 +20,13 @@ public sealed class JsonWordSearchSettingsReaderTests
             Assert.Equal(20, settings.Board.Height);
             Assert.Equal(2588, settings.Page.Width);
             Assert.Equal(3375, settings.Page.Height);
+            Assert.Equal(13, settings.MaximumKeywordLength);
+            Assert.Equal(4, settings.MaximumProcessingConcurrency);
             var json = await File.ReadAllTextAsync(Path.Combine(root, "settings.json"));
             Assert.Contains("\"board\"", json, StringComparison.Ordinal);
             Assert.Contains("\"page\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"maximumKeywordLength\": 13", json, StringComparison.Ordinal);
+            Assert.Contains("\"maximumProcessingConcurrency\": 4", json, StringComparison.Ordinal);
             Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
         }
         finally
@@ -40,12 +44,26 @@ public sealed class JsonWordSearchSettingsReaderTests
 
         Assert.Equal(20, settings.Global.Board.Width);
         Assert.Equal(3375, settings.Global.Page.Height);
+        Assert.Equal(13, settings.Global.MaximumKeywordLength);
         Assert.Equal(2000, settings.Brand.BoardGame.Rectangle.Width);
         Assert.Equal(TextAlignment.Center, settings.Brand.Topic.Alignment);
         Assert.Equal(4, settings.Brand.KeywordList.Columns.Count);
         Assert.Equal(80, settings.Brand.KeywordList.StepY);
         Assert.Equal("Arial", settings.Brand.BoardGame.Font.Name);
         Assert.Equal("#8B1E1E", settings.Brand.AnswerLine.Color);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(13)]
+    public void RejectsProcessingConcurrencyOutsideSupportedRange(int value)
+    {
+        var exception = Assert.Throws<WordSearchGenerationException>(() =>
+            JsonWordSearchSettingsReader.ValidateGlobal(
+                WordSearchSettingsDefaults.CreateGlobal() with { MaximumProcessingConcurrency = value }));
+
+        Assert.Equal("maximum_processing_concurrency_invalid", exception.Code);
+        Assert.Contains("between 1 and 12", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

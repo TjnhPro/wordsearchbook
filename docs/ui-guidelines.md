@@ -27,7 +27,7 @@
 - Keep a **Page layout preview** panel inside the Page Layout card. **Draw demo** uses only saved settings and writes `page_layout.preview.png` beside the source layout through the background queue.
 - Disable **Draw demo** while the selected Brand has unsaved edits, is saving, or already has an active preview task. **Open folder** remains available and must use the desktop-derived Brand path rather than a path supplied by the frontend.
 - Preview generation is independent from the validation certificate and must never modify `page_layout.png` or `brand.validation.json`.
-- Books may list any Brand with readable settings, but **Generate pages** stays disabled until the shared Brand certificate for page layout and optional Front/Back assets is `Validated`.
+- Books may list any Brand with readable settings, but **Process** stays disabled until both the CSV certificate and shared Brand certificate for page layout and optional Front/Back assets are `Validated`.
 - Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
 - Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.
 - Keyword list exposes four independent X anchors, one shared Column Y, and one shared vertical step. Arrange the two-column form as X1/X2, X3/X4, Column Y/Vertical step, Alignment/Font, then Font size/Font color. The 20 keywords fill column-major with five rows per column; alignment applies to every keyword.
@@ -35,3 +35,13 @@
 - Do not redraw a dirty Brand Detail during task polling. Save through the background queue and retain the draft when saving fails.
 - Before changing brand or leaving the Brands route with unsaved edits, require an explicit Save, Discard, or Cancel choice.
 - Create Brand accepts one valid Windows folder name, creates default settings through the background queue, then reloads and selects the new brand.
+
+## Books workspace
+
+- Use a `4/8` master-detail grid. Book List and Book Detail own independent vertical scrollbars.
+- Keep search fixed above the list, filter folder names case-insensitively after a `200ms` debounce, and update only list rows while typing. Render at most the first 250 matches and ask for a narrower query beyond that window.
+- Book Detail has exactly two tabs for this phase: **Overview** and **Output**. Preserve the selected tab and book across task refreshes.
+- Overview shows CSV certificate status/hash/time, topic and keyword totals, per-topic `20/20` status, row-aware validation failures and **Validate CSV**.
+- Output shows Brand selection, ready/stale status, PDF/Answer counts and sizes, fixed `2588x3375` at 300 PPI, **Process**, and **Open folder**.
+- Disable Process unless `data.csv` and the selected Brand are both currently `Validated`. Keep Open folder available for ready or stale published output.
+- Validation and processing run through the background queue. Avoid full Books-route redraws during task-only polling so search focus is stable; redraw after a returned workspace snapshot.

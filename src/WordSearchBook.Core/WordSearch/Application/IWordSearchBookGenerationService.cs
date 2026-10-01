@@ -6,5 +6,6 @@ public interface IWordSearchBookGenerationService
 {
     Task<WordSearchGenerationResult> GenerateAsync(
         WordSearchGenerationRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<WordSearchGenerationProgress>? progress = null);
 }

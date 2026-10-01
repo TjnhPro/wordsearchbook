@@ -46,8 +46,12 @@ public sealed class WordSearchBookGenerationServiceTests
                 Assert.Equal("sample-book", manifest.RootElement.GetProperty("bookId").GetString());
                 Assert.Equal("AMAZING ANIMALS", manifest.RootElement.GetProperty("topics")[0].GetProperty("name").GetString());
                 Assert.Equal("RED PANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("keyword").GetString());
+                Assert.Equal("REDPANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("wordSearchKey").GetString());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("entries").GetArrayLength());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("placements").GetArrayLength());
+                Assert.Contains(
+                    manifest.RootElement.GetProperty("topics")[0].GetProperty("placements").EnumerateArray(),
+                    placement => placement.GetProperty("wordSearchKey").GetString() == "REDPANDA");
                 Assert.Equal(4, manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").EnumerateObject().Count());
                 Assert.Equal("topics/001/page.png", manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").GetProperty("page").GetString());
                 Assert.Equal("topics/001/page-answer.png", manifest.RootElement.GetProperty("topics")[0].GetProperty("artifacts").GetProperty("pageAnswer").GetString());
@@ -55,10 +59,17 @@ public sealed class WordSearchBookGenerationServiceTests
 
             var sentinel = Path.Combine(cacheDirectory, "old-cache.txt");
             await File.WriteAllTextAsync(sentinel, "old");
+            var legacyBrandCache = Path.Combine(cacheDirectory, "legacy-brand");
+            Directory.CreateDirectory(legacyBrandCache);
+            await File.WriteAllTextAsync(Path.Combine(legacyBrandCache, "manifest.json"), "old");
             var secondResult = await service.GenerateAsync(request);
 
             Assert.False(File.Exists(sentinel));
+            Assert.False(Directory.Exists(legacyBrandCache));
             Assert.True(File.Exists(secondResult.ManifestPath));
+            Assert.Equal(
+                Path.Combine(root, "input", "sample-book", ".workspace", "cache", "manifest.json"),
+                secondResult.ManifestPath);
         }
         finally
         {
@@ -254,6 +265,11 @@ public sealed class WordSearchBookGenerationServiceTests
         foreach (var sourceFile in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(source, sourceFile);
+            if (relativePath.Split(Path.DirectorySeparatorChar).Contains(".workspace", StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var destinationFile = Path.Combine(destination, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             File.Copy(sourceFile, destinationFile);

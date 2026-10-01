@@ -115,7 +115,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
             settings.Brand.Topic.Alignment,
             topicFont,
             topicBrush,
-            settings.Global.Page);
+            settings.Global.Page,
+            $"Topic '{topic.Name}' is outside the printable page. Adjust the Topic position in Brand Settings.");
 
         DrawKeywords(graphics, topic, settings);
 
@@ -129,7 +130,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
             settings.Brand.PageNumber.Alignment,
             pageFont,
             pageBrush,
-            settings.Global.Page);
+            settings.Global.Page,
+            $"Page number '{pageNumber}' is outside the printable page. Adjust the Page number position in Brand Settings.");
     }
 
     private static void DrawKeywords(
@@ -140,67 +142,83 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         var keywordSettings = settings.Brand.KeywordList;
         using var font = SystemDrawingRenderSupport.CreateFont(keywordSettings.Font);
         using var brush = new SolidBrush(SystemDrawingRenderSupport.ParseColor(keywordSettings.Font.Color));
-        var measured = new List<(string Value, RectangleF Bounds)>(ExpectedKeywordCount);
+        var measured = new List<MeasuredKeyword>(ExpectedKeywordCount);
 
         for (var index = 0; index < topic.Entries.Count; index++)
         {
             var columnIndex = index / KeywordsPerColumn;
             var rowIndex = index % KeywordsPerColumn;
+            var entry = topic.Entries[index];
             var anchor = keywordSettings.Columns[columnIndex];
             var bounds = MeasureAnchoredText(
                 graphics,
-                topic.Entries[index].Keyword,
+                entry.Keyword,
                 anchor.X,
                 anchor.Y + (rowIndex * keywordSettings.StepY),
                 keywordSettings.Alignment,
                 font,
-                settings.Global.Page);
-            EnsureWithinKeywordSlot(
-                topic.Entries[index].Keyword,
-                bounds,
-                columnIndex,
-                keywordSettings,
-                settings.Global.Page);
-            if (measured.Any(existing => existing.Bounds.IntersectsWith(bounds)))
-            {
-                throw new WordSearchGenerationException(
-                    "page_text_overflow",
-                    $"Keyword '{topic.Entries[index].Keyword}' crosses a neighboring keyword slot.");
-            }
-
-            measured.Add((topic.Entries[index].Keyword, bounds));
+                settings.Global.Page,
+                $"{EntryContext(topic, entry)} is outside the printable page. Adjust the keyword columns or font in Brand Settings.");
+            measured.Add(new MeasuredKeyword(entry, columnIndex, rowIndex, bounds));
         }
+
+        EnsureKeywordColumnsDoNotTouch(measured, topic, keywordSettings);
+        EnsureKeywordRowsDoNotTouch(measured, topic);
 
         foreach (var item in measured)
         {
-            graphics.DrawString(item.Value, font, brush, item.Bounds.X, item.Bounds.Y);
+            graphics.DrawString(item.Entry.Keyword, font, brush, item.Bounds.X, item.Bounds.Y);
         }
     }
 
-    private static void EnsureWithinKeywordSlot(
-        string value,
-        RectangleF bounds,
-        int columnIndex,
-        KeywordListSettings settings,
-        PageSize pageSize)
+    private static void EnsureKeywordColumnsDoNotTouch(
+        IReadOnlyCollection<MeasuredKeyword> measured,
+        WordSearchTopic topic,
+        KeywordListSettings settings)
     {
-        var ordered = settings.Columns
+        var orderedColumns = settings.Columns
             .Select((column, index) => (column.X, Index: index))
             .OrderBy(column => column.X)
             .ToArray();
-        var orderedIndex = Array.FindIndex(ordered, column => column.Index == columnIndex);
-        var left = orderedIndex == 0
-            ? 0f
-            : (ordered[orderedIndex - 1].X + ordered[orderedIndex].X) / 2f;
-        var right = orderedIndex == ordered.Length - 1
-            ? pageSize.Width
-            : (ordered[orderedIndex].X + ordered[orderedIndex + 1].X) / 2f;
 
-        if (bounds.Left < left || bounds.Right > right || bounds.Height > settings.StepY)
+        for (var index = 0; index < orderedColumns.Length - 1; index++)
         {
-            throw new WordSearchGenerationException(
-                "page_text_overflow",
-                $"Keyword '{value}' crosses a neighboring keyword slot.");
+            var leftColumn = orderedColumns[index];
+            var rightColumn = orderedColumns[index + 1];
+            var rightMostLeftKeyword = measured
+                .Where(keyword => keyword.ColumnIndex == leftColumn.Index)
+                .MaxBy(keyword => keyword.Bounds.Right)!;
+            var leftMostRightKeyword = measured
+                .Where(keyword => keyword.ColumnIndex == rightColumn.Index)
+                .MinBy(keyword => keyword.Bounds.Left)!;
+
+            if (rightMostLeftKeyword.Bounds.Right >= leftMostRightKeyword.Bounds.Left)
+            {
+                throw new WordSearchGenerationException(
+                    "keyword_slot_width_overflow",
+                    $"{EntryContext(topic, rightMostLeftKeyword.Entry)} touches or overlaps Keyword '{leftMostRightKeyword.Entry.Keyword}' from CSV row {leftMostRightKeyword.Entry.SourceRow} between keyword columns {leftColumn.Index + 1} and {rightColumn.Index + 1}. Shorten either Keyword, reduce the keyword font size, or increase the space between columns in Brand Settings.");
+            }
+        }
+    }
+
+    private static void EnsureKeywordRowsDoNotTouch(
+        IReadOnlyCollection<MeasuredKeyword> measured,
+        WordSearchTopic topic)
+    {
+        foreach (var column in measured.GroupBy(keyword => keyword.ColumnIndex))
+        {
+            var orderedRows = column.OrderBy(keyword => keyword.RowIndex).ToArray();
+            for (var index = 0; index < orderedRows.Length - 1; index++)
+            {
+                var upperKeyword = orderedRows[index];
+                var lowerKeyword = orderedRows[index + 1];
+                if (upperKeyword.Bounds.Bottom >= lowerKeyword.Bounds.Top)
+                {
+                    throw new WordSearchGenerationException(
+                        "keyword_slot_height_overflow",
+                        $"{EntryContext(topic, upperKeyword.Entry)} touches or overlaps Keyword '{lowerKeyword.Entry.Keyword}' from CSV row {lowerKeyword.Entry.SourceRow} in keyword column {upperKeyword.ColumnIndex + 1}. Increase the keyword row spacing or reduce the keyword font size in Brand Settings.");
+                }
+            }
         }
     }
 
@@ -212,9 +230,10 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         TextAlignment alignment,
         Font font,
         Brush brush,
-        PageSize pageSize)
+        PageSize pageSize,
+        string boundaryMessage)
     {
-        var bounds = MeasureAnchoredText(graphics, value, x, y, alignment, font, pageSize);
+        var bounds = MeasureAnchoredText(graphics, value, x, y, alignment, font, pageSize, boundaryMessage);
         graphics.DrawString(value, font, brush, bounds.X, bounds.Y);
     }
 
@@ -225,7 +244,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         int y,
         TextAlignment alignment,
         Font font,
-        PageSize pageSize)
+        PageSize pageSize,
+        string boundaryMessage)
     {
         var size = graphics.MeasureString(value, font);
         var left = alignment switch
@@ -239,8 +259,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         if (bounds.Left < 0 || bounds.Top < 0 || bounds.Right > pageSize.Width || bounds.Bottom > pageSize.Height)
         {
             throw new WordSearchGenerationException(
-                "page_text_overflow",
-                $"Text '{value}' crosses the page boundary.");
+                "page_text_boundary_overflow",
+                boundaryMessage);
         }
 
         return bounds;
@@ -282,4 +302,13 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
     }
 
     private static WordSearchGenerationException Invalid(string message) => new("render_input_invalid", message);
+
+    private static string EntryContext(WordSearchTopic topic, WordSearchEntry entry) =>
+        $"CSV row {entry.SourceRow}, topic '{topic.Name}': Keyword '{entry.Keyword}'";
+
+    private sealed record MeasuredKeyword(
+        WordSearchEntry Entry,
+        int ColumnIndex,
+        int RowIndex,
+        RectangleF Bounds);
 }

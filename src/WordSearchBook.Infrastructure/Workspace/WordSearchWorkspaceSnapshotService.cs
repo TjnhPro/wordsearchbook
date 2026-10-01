@@ -1,3 +1,4 @@
+using System.Text.Json;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
@@ -9,10 +10,11 @@ using WordSearchBook.Infrastructure.WordSearch.Validation;
 namespace WordSearchBook.Infrastructure.Workspace;
 
 public sealed class WordSearchWorkspaceSnapshotService(
-    IWordSearchInputReader inputReader,
+    IBookDataValidationService bookDataValidationService,
     IWordSearchSettingsReader settingsReader,
     IBrandValidationService validationService,
-    IBookBrandAssignmentStore assignmentStore) : IWorkspaceSnapshotService
+    IBookBrandAssignmentStore assignmentStore,
+    IBookOutputSnapshotService outputSnapshotService) : IWorkspaceSnapshotService
 {
     public async Task<WorkspaceSnapshot> RefreshAsync(
         string rootPath,
@@ -28,7 +30,7 @@ public sealed class WordSearchWorkspaceSnapshotService(
         var assignments = await assignmentStore.ReadAsync(cancellationToken);
         var (global, globalIssue) = await ReadGlobalAsync(fullRoot, cancellationToken);
         var brands = await ReadBrandsAsync(fullRoot, global, globalIssue, cancellationToken);
-        var books = await ReadBooksAsync(fullRoot, assignments, brands, cancellationToken);
+        var books = await ReadBooksAsync(fullRoot, assignments, brands, global, cancellationToken);
         return new WorkspaceSnapshot(fullRoot, global, globalIssue, brands, books, DateTimeOffset.UtcNow);
     }
 
@@ -128,6 +130,7 @@ public sealed class WordSearchWorkspaceSnapshotService(
         string rootPath,
         IReadOnlyDictionary<string, string> assignments,
         IReadOnlyList<WorkspaceBrand> brands,
+        GlobalWordSearchSettings? global,
         CancellationToken cancellationToken)
     {
         var inputRoot = Path.Combine(rootPath, "input");
@@ -137,6 +140,10 @@ public sealed class WordSearchWorkspaceSnapshotService(
         }
 
         var knownBrands = brands.Select(brand => brand.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var brandValidations = brands.ToDictionary(
+            brand => brand.Id,
+            brand => brand.Validation,
+            StringComparer.OrdinalIgnoreCase);
         var results = new List<WorkspaceBook>();
         foreach (var directory in Directory.EnumerateDirectories(inputRoot).Order(StringComparer.OrdinalIgnoreCase))
         {
@@ -149,15 +156,26 @@ public sealed class WordSearchWorkspaceSnapshotService(
             }
 
             var cachedBrands = ReadCachedBrands(directory);
-            try
-            {
-                var topics = await inputReader.ReadAsync(Path.Combine(directory, "data.csv"), cancellationToken);
-                results.Add(new WorkspaceBook(bookId, topics.Count, selectedBrandId, cachedBrands, null));
-            }
-            catch (WordSearchGenerationException exception)
-            {
-                results.Add(new WorkspaceBook(bookId, 0, selectedBrandId, cachedBrands, Issue(exception)));
-            }
+            var validation = await bookDataValidationService.CheckStateAsync(
+                rootPath,
+                bookId,
+                global?.MaximumKeywordLength ?? WordSearchSettingsDefaults.MaximumKeywordLength,
+                cancellationToken);
+            var output = await outputSnapshotService.ReadAsync(
+                rootPath,
+                bookId,
+                selectedBrandId,
+                validation,
+                brandValidations,
+                cancellationToken);
+            results.Add(new WorkspaceBook(
+                bookId,
+                validation.TopicCount,
+                selectedBrandId,
+                cachedBrands,
+                DataIssue(validation),
+                validation,
+                output));
         }
 
         return results;
@@ -166,19 +184,37 @@ public sealed class WordSearchWorkspaceSnapshotService(
     private static IReadOnlyList<string> ReadCachedBrands(string bookDirectory)
     {
         var cacheRoot = Path.Combine(bookDirectory, ".workspace", "cache");
-        if (!Directory.Exists(cacheRoot))
+        var manifestPath = Path.Combine(cacheRoot, "manifest.json");
+        if (!File.Exists(manifestPath))
         {
             return [];
         }
 
-        return Directory.EnumerateDirectories(cacheRoot)
-            .Where(directory => File.Exists(Path.Combine(directory, "manifest.json")))
-            .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Cast<string>()
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        try
+        {
+            using var manifest = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
+            var brandId = manifest.RootElement.GetProperty("brandId").GetString();
+            return string.IsNullOrWhiteSpace(brandId) ? [] : [brandId];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException)
+        {
+            return [];
+        }
     }
 
     private static WorkspaceIssue Issue(WordSearchGenerationException exception) => new(exception.Code, exception.Message);
+
+    private static WorkspaceIssue? DataIssue(BookDataValidationState validation) => validation.Status switch
+    {
+        BookDataValidationStatus.Validated => null,
+        BookDataValidationStatus.Invalid when validation.Failures?.FirstOrDefault() is { } failure =>
+            new WorkspaceIssue(failure.Code, failure.Message),
+        BookDataValidationStatus.Invalid =>
+            new WorkspaceIssue("book_data_invalid", "data.csv is invalid."),
+        BookDataValidationStatus.NeedsValidation =>
+            new WorkspaceIssue(
+                validation.ReasonCode ?? "book_data_needs_validation",
+                "data.csv changed and must be validated again."),
+        _ => new WorkspaceIssue("book_data_not_validated", "data.csv has not been validated.")
+    };
 }

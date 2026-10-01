@@ -1,5 +1,5 @@
 const routeDefinitions = {
-  books: { title: "Books", heading: "Word-search books", copy: "Inspect input, choose a brand, and generate complete page caches." },
+  books: { title: "Books", heading: "Word-search books", copy: "Validate CSV input, inspect topics, and publish print-ready output." },
   brands: { title: "Brands", heading: "Brand layouts", copy: "Review and edit the layout settings for an existing brand." },
   tasks: { title: "Tasks", heading: "Background tasks", copy: "Queued and running work stays isolated from the desktop UI thread." },
   settings: { title: "Settings", heading: "Workspace settings", copy: "Review the fixed output format and edit global board settings." }
@@ -8,6 +8,7 @@ const fixedPageSize = { width: 2588, height: 3375 };
 const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
 const state = {
   route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null,
+  bookSearchQuery: "", selectedBookTab: "overview", bookValidationFeedback: null, bookProcessingFeedback: null,
   brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false,
   brandSaving: false, brandValidationFeedback: null, brandPreviewFeedback: null,
   pendingNavigation: null, client: null, pollTimers: new Map()
@@ -27,6 +28,41 @@ function brandValidationPresentation(validation) {
   return { label: "Not validated", tone: "neutral" };
 }
 function canGenerateWithBrand(brand) { return brand?.validation?.status === "Validated"; }
+function bookDataValidationPresentation(validation) {
+  const status = validation?.status ?? "NotValidated";
+  if (status === "Validated") return { label: "Validated", tone: "good" };
+  if (status === "Invalid") return { label: "Invalid", tone: "bad" };
+  if (status === "NeedsValidation") return { label: "Needs validation", tone: "warn" };
+  return { label: "Not validated", tone: "neutral" };
+}
+function bookOutputPresentation(output) {
+  const status = output?.status ?? "Missing";
+  if (status === "Ready") return { label: "Ready", tone: "good" };
+  if (status === "Stale") return { label: "Stale", tone: "warn" };
+  if (status === "Unavailable") return { label: "Unavailable", tone: "bad" };
+  return { label: "Not processed", tone: "neutral" };
+}
+function filterBooks(books, query) {
+  const normalized = String(query ?? "").trim().toLocaleLowerCase();
+  return normalized ? books.filter(book => book.id.toLocaleLowerCase().includes(normalized)) : books;
+}
+function bookValidationFailureContext(failure) {
+  const context = [];
+  if (failure?.sourceRow) context.push(`Row ${failure.sourceRow}`);
+  if (failure?.topic) context.push(String(failure.topic));
+  return context.join(" · ") || "CSV";
+}
+function formatBytes(value) {
+  const bytes = Number(value ?? 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 ** 2)).toFixed(1)} MB`;
+}
+function formatDate(value) { return value ? new Date(value).toLocaleString() : "Never"; }
+function isBookTaskActive(kind, bookId) {
+  return state.tasks.some(task => task.kind === kind && task.subject === bookId && activeTaskStates.has(task.state));
+}
 function isBrandValidationActive(brandId) {
   return state.tasks.some(task => task.kind === "BrandValidation" && task.subject === brandId && activeTaskStates.has(task.state));
 }
@@ -54,7 +90,9 @@ function createDebouncedAction(callback, delay = 250, timers = globalThis) {
 function canonicalBrandSettings(settings) { return JSON.stringify(settings); }
 function hasBrandSettingsChanged(settings, baseline) { return canonicalBrandSettings(settings) !== baseline; }
 function shouldRenderForTaskUpdate(routeName, snapshotChanged, brandDirty = false) {
-  return routeName !== "brands" || (snapshotChanged && !brandDirty);
+  if (routeName === "tasks") return true;
+  if (routeName === "brands") return snapshotChanged && !brandDirty;
+  return snapshotChanged;
 }
 function brandNavigationDisposition(routeName, brandDirty, brandSaving) {
   if (brandSaving) return "blocked";
@@ -91,6 +129,19 @@ function requestNavigation(destination, documentRoot, render) {
   return true;
 }
 
+function bookRowsMarkup(books, selectedBookId) {
+  if (!books.length) return `<div class="book-list-empty"><strong>No matching books</strong><p>Try a different folder name.</p></div>`;
+  const windowed = books.slice(0, 250);
+  const rows = windowed.map(book => {
+    const validation = bookDataValidationPresentation(book.dataValidation);
+    return `<button class="book-row ${book.id === selectedBookId ? "book-row-active" : ""}" data-action="select-book" data-book-id="${escapeHtml(book.id)}"><span><strong>${escapeHtml(book.id)}</strong><small>${book.topicCount || 0} topic${book.topicCount === 1 ? "" : "s"}</small></span>${badge(validation.label, validation.tone)}</button>`;
+  }).join("");
+  const remainder = books.length > windowed.length
+    ? `<p class="book-window-note">Showing the first ${windowed.length} matches. Refine the search to narrow the list.</p>`
+    : "";
+  return `${rows}${remainder}`;
+}
+
 function renderBooks() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Scanning workspace…</p><p class="empty-panel-copy">Books and brands are loaded by a background task.</p></div>`;
   const books = state.snapshot.books ?? [];
@@ -103,25 +154,49 @@ function renderBooks() {
   const selectedBrand = selected.selectedBrandId ?? "";
   const selectedBrandRecord = brands.find(brand => brand.id === selectedBrand);
   const selectedBrandValidated = canGenerateWithBrand(selectedBrandRecord);
-  const generationActive = state.tasks.some(task => task.kind === "BookGeneration" && task.subject === selected.id && activeTaskStates.has(task.state));
+  const validationActive = isBookTaskActive("BookDataValidation", selected.id);
+  const processingActive = isBookTaskActive("BookProcessing", selected.id);
+  const dataValidation = selected.dataValidation ?? { status: "NotValidated", topics: [], failures: [] };
+  const dataPresentation = bookDataValidationPresentation(dataValidation);
+  const output = selected.output ?? { status: "Missing" };
+  const outputPresentation = bookOutputPresentation(output);
   const options = [`<option value="">Choose a brand</option>`, ...validBrands.map(brand => `<option value="${escapeHtml(brand.id)}" ${brand.id === selectedBrand ? "selected" : ""}>${escapeHtml(brand.id)}</option>`)].join("");
-  const cached = (selected.cachedBrandIds ?? []).length ? selected.cachedBrandIds.map(id => badge(`Cached: ${id}`, "good")).join("") : badge("Not generated");
-  const list = books.map(book => `<button class="book-row ${book.id === selected.id ? "book-row-active" : ""}" data-action="select-book" data-book-id="${escapeHtml(book.id)}"><span><strong>${escapeHtml(book.id)}</strong><small>${book.issue ? "Input needs attention" : `${book.topicCount} topic${book.topicCount === 1 ? "" : "s"}`}</small></span>${book.issue ? badge("Invalid", "bad") : badge("Ready", "good")}</button>`).join("");
-
-  const validationGuidance = selectedBrand && !selectedBrandValidated
-    ? `<p class="generation-guidance">Validate this Brand in Brand layouts before generating.</p>`
+  const filteredBooks = filterBooks(books, state.bookSearchQuery);
+  const validationFeedback = state.bookValidationFeedback?.bookId === selected.id
+    ? state.bookValidationFeedback.failures ?? []
+    : dataValidation.failures ?? [];
+  const failureRows = validationFeedback.length
+    ? `<div class="book-validation-errors"><h4>Validation issues</h4><ul>${validationFeedback.map(failure => `<li><span>${escapeHtml(bookValidationFailureContext(failure))}</span><p>${escapeHtml(failure.message)}</p></li>`).join("")}</ul></div>`
     : "";
-  return `<div class="master-detail"><section class="panel list-panel"><div class="panel-header"><div><h3>Books</h3><p>${books.length} discovered</p></div><button class="button-secondary" data-action="refresh">Refresh</button></div><div class="book-list">${list}</div></section><section class="panel detail-panel"><div class="detail-heading"><div><p class="eyebrow">Selected book</p><h3>${escapeHtml(selected.id)}</h3></div>${selected.issue ? badge("Invalid input", "bad") : badge("Ready", "good")}</div>${issueMarkup(selected.issue)}<dl class="summary-grid"><div><dt>Topics</dt><dd>${selected.topicCount}</dd></div><div><dt>Cache</dt><dd class="badge-row">${cached}</dd></div></dl><label class="field"><span>Brand</span><select data-action="assign-brand" data-book-id="${escapeHtml(selected.id)}" ${selected.issue ? "disabled" : ""}>${options}</select></label>${validationGuidance}<div class="action-row"><button class="button-primary" data-action="generate" data-book-id="${escapeHtml(selected.id)}" data-brand-id="${escapeHtml(selectedBrand)}" ${selected.issue || !selectedBrand || !selectedBrandValidated || generationActive ? "disabled" : ""}>${generationActive ? "Generating…" : "Generate pages"}</button></div><div class="preview-placeholder"><strong>Preview</strong><p>Puzzle and answer page preview will be designed in a later UI phase.</p></div></section></div>`;
+  const topics = dataValidation.topics ?? [];
+  const topicRows = topics.length
+    ? topics.map(topic => `<tr><td>${escapeHtml(topic.name)}</td><td>${topic.keywordCount}/20</td><td>${badge(topic.isValid ? "Ready" : "Invalid", topic.isValid ? "good" : "bad")}</td></tr>`).join("")
+    : `<tr><td colspan="3">Validate data.csv to load the topic summary.</td></tr>`;
+  const overview = `<div class="book-tab-panel"><div class="book-status-grid"><div><span>CSV status</span><strong>${dataPresentation.label}</strong></div><div><span>Topics</span><strong>${dataValidation.topicCount ?? selected.topicCount ?? 0}</strong></div><div><span>Keywords</span><strong>${dataValidation.keywordCount ?? 0}</strong></div><div><span>Validated</span><strong>${escapeHtml(formatDate(dataValidation.validatedAtUtc))}</strong></div></div><div class="book-card"><div class="book-card-heading"><div><h4>data.csv</h4><p title="${escapeHtml(dataValidation.contentHash ?? "")}">${escapeHtml(shortFingerprint(dataValidation.contentHash))}</p></div>${badge(dataPresentation.label, dataPresentation.tone)}</div><div class="action-row"><button class="button-primary" data-action="validate-book-data" data-book-id="${escapeHtml(selected.id)}" ${validationActive || processingActive ? "disabled" : ""}>${validationActive ? "Validating…" : "Validate CSV"}</button></div></div>${failureRows}<div class="table-scroll book-topic-table"><table><thead><tr><th>Topic</th><th>Keywords</th><th>Status</th></tr></thead><tbody>${topicRows}</tbody></table></div></div>`;
+  const processAllowed = dataValidation.status === "Validated" && Boolean(selectedBrand) && selectedBrandValidated && !selectedBrandRecord?.issue && !processingActive && !validationActive;
+  const guidance = dataValidation.status !== "Validated"
+    ? "Validate data.csv before processing."
+    : !selectedBrand
+      ? "Choose a Brand before processing."
+      : selectedBrandRecord?.issue
+        ? selectedBrandRecord.issue.message
+        : !selectedBrandValidated
+          ? "Validate this Brand in Brand layouts before processing."
+          : "";
+  const processingFeedback = state.bookProcessingFeedback?.bookId === selected.id ? state.bookProcessingFeedback : null;
+  const outputPanel = `<div class="book-tab-panel"><div class="book-output-header"><div><span>Output status</span><div>${badge(outputPresentation.label, outputPresentation.tone)}</div></div><div><span>Last processed</span><strong>${escapeHtml(formatDate(output.processedAtUtc))}</strong></div></div><label class="field"><span>Brand</span><select data-action="assign-brand" data-book-id="${escapeHtml(selected.id)}" ${processingActive ? "disabled" : ""}>${options}</select></label>${guidance ? `<p class="generation-guidance">${escapeHtml(guidance)}</p>` : ""}<dl class="output-summary-grid"><div><dt>PDF</dt><dd>${escapeHtml(output.pdfFileName ?? `${selected.id}.interior.pdf`)}</dd><small>${formatBytes(output.pdfLengthBytes)}</small></div><div><dt>PDF pages</dt><dd>${output.pdfPageCount ?? 0}</dd><small>${output.frontPageCount ?? 0} front · ${output.puzzlePageCount ?? 0} puzzle · ${output.backPageCount ?? 0} back</small></div><div><dt>Answers</dt><dd>${output.answerCount ?? 0} JPG</dd><small>${formatBytes(output.answerLengthBytes)} · quality 85</small></div><div><dt>Print raster</dt><dd>2588 × 3375</dd><small>300 pixels / inch</small></div></dl>${output.reasonCode ? `<p class="output-stale-reason">${escapeHtml(output.reasonCode)}</p>` : ""}${processingFeedback ? `<p class="book-process-feedback" data-state="${escapeHtml(processingFeedback.tone)}">${escapeHtml(processingFeedback.message)}</p>` : ""}<div class="action-row"><button class="button-primary" data-action="process-book" data-book-id="${escapeHtml(selected.id)}" data-brand-id="${escapeHtml(selectedBrand)}" ${processAllowed ? "" : "disabled"}>${processingActive ? "Processing…" : "Process"}</button><button class="button-secondary" data-action="open-book-output" data-book-id="${escapeHtml(selected.id)}" ${output.status === "Ready" || output.status === "Stale" ? "" : "disabled"}>Open folder</button></div></div>`;
+  const detail = state.selectedBookTab === "output" ? outputPanel : overview;
+  return `<div class="book-workspace"><section class="panel book-list-panel"><div class="book-panel-header"><div><h3>Books</h3><p data-book-result-count>${filteredBooks.length} of ${books.length} shown</p></div><button class="button-secondary" data-action="refresh">Refresh</button></div><label class="book-search"><span class="sr-only">Search books</span><input type="search" data-action="search-books" value="${escapeHtml(state.bookSearchQuery)}" placeholder="Search folder name…" autocomplete="off"></label><div class="book-list-scroll" data-book-list>${bookRowsMarkup(filteredBooks, selected.id)}</div></section><section class="panel book-detail-panel"><div class="book-detail-header"><div><p class="eyebrow">Book detail</p><h3>${escapeHtml(selected.id)}</h3></div><div class="badge-row">${badge(dataPresentation.label, dataPresentation.tone)}${badge(outputPresentation.label, outputPresentation.tone)}</div></div><div class="book-tabs" role="tablist"><button type="button" role="tab" data-action="select-book-tab" data-tab="overview" aria-selected="${state.selectedBookTab === "overview"}">Overview</button><button type="button" role="tab" data-action="select-book-tab" data-tab="output" aria-selected="${state.selectedBookTab === "output"}">Output</button></div><div class="book-detail-scroll">${detail}</div></section></div>`;
 }
 
 function renderTasks() {
-  if (!state.tasks.length) return `<div class="empty-panel"><p class="empty-panel-title">No task history</p><p class="empty-panel-copy">Workspace refresh, generation, and settings work will appear here.</p></div>`;
+  if (!state.tasks.length) return `<div class="empty-panel"><p class="empty-panel-title">No task history</p><p class="empty-panel-copy">Workspace refresh, validation, processing, and settings work will appear here.</p></div>`;
   const rows = state.tasks.map(task => {
     const active = activeTaskStates.has(task.state);
     const tone = task.state === "Completed" ? "good" : task.state === "Failed" ? "bad" : active ? "warn" : "neutral";
     return `<tr><td>${escapeHtml(task.kind)}</td><td>${escapeHtml(task.subject ?? "—")}</td><td>${badge(task.state, tone)}</td><td>${escapeHtml(task.step ?? "—")}</td><td>${escapeHtml(task.errorMessage ?? "—")}</td><td>${active ? `<button class="button-link" data-action="cancel-task" data-task-id="${escapeHtml(task.taskId)}">Cancel</button>` : ""}</td></tr>`;
   }).join("");
-  return `<section class="panel"><div class="panel-header"><div><h3>Task history</h3><p>Latest activity first</p></div><button class="button-secondary" data-action="list-tasks">Refresh</button></div><div class="table-scroll"><table><thead><tr><th>Kind</th><th>Subject</th><th>State</th><th>Step</th><th>Error</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  return `<section class="panel task-history-panel"><div class="panel-header"><div><h3>Task history</h3><p>Latest activity first</p></div><button class="button-secondary" data-action="list-tasks">Refresh</button></div><div class="table-scroll task-history-scroll"><table><thead><tr><th>Kind</th><th>Subject</th><th>State</th><th>Step</th><th>Error</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
 function settingInput(name, label, value, type = "number", extra = "") {
@@ -242,7 +317,7 @@ function renderSettings() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading settings…</p></div>`;
   const global = state.snapshot.globalSettings;
   if (!global) return `<section class="panel">${issueMarkup(state.snapshot.globalSettingsIssue)}</section>`;
-  const globalForm = `<form class="panel settings-form" data-form="global-settings"><div class="panel-header"><div><h3>Global settings</h3><p>Board and fixed output page</p></div><button class="button-primary" type="submit">Save global</button></div><div class="fixed-page-card"><span>Output page</span><strong>${global.page.width} × ${global.page.height} px</strong><p>Fixed for page_layout.png compatibility.</p></div><div class="settings-grid mt-5">${settingInput("board.width", "Board width", global.board.width, "number", "min=\"1\"")}${settingInput("board.height", "Board height", global.board.height, "number", "min=\"1\"")}</div></form>`;
+  const globalForm = `<form class="panel settings-form" data-form="global-settings"><div class="panel-header"><div><h3>Global settings</h3><p>CSV rules, processing, board and fixed output page</p></div><button class="button-primary" type="submit">Save global</button></div><div class="fixed-page-card"><span>Output page</span><strong>${global.page.width} × ${global.page.height} px</strong><p>Fixed for page_layout.png compatibility.</p></div><div class="settings-grid mt-5">${settingInput("board.width", "Board width", global.board.width, "number", "min=\"1\"")}${settingInput("board.height", "Board height", global.board.height, "number", "min=\"1\"")}${settingInput("maximumKeywordLength", "Max Keyword characters", global.maximumKeywordLength, "number", "min=\"1\" max=\"100\"")}${settingInput("maximumProcessingConcurrency", "Maximum processing concurrency", global.maximumProcessingConcurrency, "number", "min=\"1\" max=\"12\"")}</div><p class="global-setting-help">Keyword length ignores whitespace and requires CSV validation after a change. Processing concurrency controls Topic, Answer and PDF workers.</p></form>`;
   return `<div class="settings-stack">${globalForm}</div>`;
 }
 
@@ -270,7 +345,7 @@ function keywordListValue(data) {
   };
 }
 function globalSettingsValue(data) {
-  return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: fixedPageSize };
+  return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: fixedPageSize, maximumKeywordLength: numberValue(data, "maximumKeywordLength"), maximumProcessingConcurrency: numberValue(data, "maximumProcessingConcurrency") };
 }
 function brandSettingsValue(data) {
   return { topic: anchoredTextValue(data, "topic"), boardGame: regionValue(data, "boardGame"), keywordList: keywordListValue(data), pageNumber: anchoredTextValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
@@ -279,7 +354,7 @@ function brandSettingsValue(data) {
 function routeMarkup(routeName) {
   const route = routeDefinitions[routeName];
   const body = routeName === "books" ? renderBooks() : routeName === "brands" ? renderBrands() : routeName === "tasks" ? renderTasks() : renderSettings();
-  return `<section class="route-page ${routeName === "brands" ? "route-page-fill" : ""}"><h2 class="page-heading">${route.heading}</h2><p class="page-copy">${route.copy}</p><div class="route-body">${body}</div></section>`;
+  return `<section class="route-page ${routeName === "brands" || routeName === "books" || routeName === "tasks" ? "route-page-fill" : ""}"><h2 class="page-heading">${route.heading}</h2><p class="page-copy">${route.copy}</p><div class="route-body">${body}</div></section>`;
 }
 
 function activateRoute(routeName, { contentElement, titleElement, navigationItems = [] }) {
@@ -436,6 +511,15 @@ function initializeWorkspace(documentRoot, render) {
     if (list) list.innerHTML = brandRowsMarkup(filteredBrands, state.selectedBrandId);
     if (count) count.textContent = `${filteredBrands.length} of ${brands.length} shown`;
   });
+  const updateBookSearch = createDebouncedAction(query => {
+    state.bookSearchQuery = query;
+    const books = state.snapshot?.books ?? [];
+    const filteredBooks = filterBooks(books, query);
+    const list = documentRoot.querySelector("[data-book-list]");
+    const count = documentRoot.querySelector("[data-book-result-count]");
+    if (list) list.innerHTML = bookRowsMarkup(filteredBooks, state.selectedBookId);
+    if (count) count.textContent = `${filteredBooks.length} of ${books.length} shown`;
+  }, 200);
   const listTasks = () => state.client.send("task.list", undefined, response => {
     if (response.ok) state.tasks = response.data ?? [];
     applyTaskUpdate(false);
@@ -557,7 +641,16 @@ function initializeWorkspace(documentRoot, render) {
   documentRoot.addEventListener("click", event => {
     const target = event.target.closest?.("[data-action]");
     if (!target) return;
-    if (target.dataset.action === "select-book") { state.selectedBookId = target.dataset.bookId; renderCurrentRoute(); }
+    if (target.dataset.action === "select-book") {
+      state.selectedBookId = target.dataset.bookId;
+      state.bookValidationFeedback = null;
+      state.bookProcessingFeedback = null;
+      renderCurrentRoute();
+    }
+    if (target.dataset.action === "select-book-tab") {
+      state.selectedBookTab = target.dataset.tab === "output" ? "output" : "overview";
+      renderCurrentRoute();
+    }
     if (target.dataset.action === "select-brand" && target.dataset.brandId !== state.selectedBrandId) {
       requestNavigation({ kind: "brand", value: target.dataset.brandId }, documentRoot, render);
     }
@@ -596,7 +689,61 @@ function initializeWorkspace(documentRoot, render) {
     }
     if (target.dataset.action === "refresh") start("workspace.refresh");
     if (target.dataset.action === "list-tasks") listTasks();
-    if (target.dataset.action === "generate") start("book.generate", { bookId: target.dataset.bookId, brandId: target.dataset.brandId });
+    if (target.dataset.action === "validate-book-data") {
+      const bookId = target.dataset.bookId;
+      state.bookValidationFeedback = null;
+      start("book.data.validate", { bookId }, {
+        onStarted: () => renderCurrentRoute(),
+        onRejected: error => {
+          state.bookValidationFeedback = { bookId, failures: [{ message: error?.message ?? "CSV validation could not be started." }] };
+          renderCurrentRoute();
+        },
+        onTerminal: (task, detail) => {
+          const failures = detail?.bookDataValidationResult?.failures ?? [];
+          state.bookValidationFeedback = {
+            bookId,
+            failures: task.state === "Completed"
+              ? failures
+              : [{ message: task.errorMessage || `CSV validation was ${String(task.state).toLocaleLowerCase()}.` }]
+          };
+          renderCurrentRoute();
+        }
+      });
+    }
+    if (target.dataset.action === "process-book") {
+      const bookId = target.dataset.bookId;
+      const brandId = target.dataset.brandId;
+      state.bookProcessingFeedback = null;
+      start("book.process", { bookId, brandId }, {
+        onStarted: () => renderCurrentRoute(),
+        onRejected: error => {
+          state.bookProcessingFeedback = { bookId, tone: "error", message: error?.message ?? "Processing could not be started." };
+          renderCurrentRoute();
+        },
+        onTerminal: (task, detail) => {
+          const processing = detail?.bookProcessingResult;
+          state.bookProcessingFeedback = {
+            bookId,
+            tone: task.state === "Completed" ? "success" : "error",
+            message: task.state === "Completed"
+              ? `Published ${processing?.pdfPageCount ?? 0} PDF pages and ${processing?.answers?.length ?? 0} Answer JPEGs.`
+              : task.errorMessage || `Processing was ${String(task.state).toLocaleLowerCase()}.`
+          };
+          renderCurrentRoute();
+        }
+      });
+    }
+    if (target.dataset.action === "open-book-output") {
+      const bookId = target.dataset.bookId;
+      state.client.send("book.output.open", { bookId }, response => {
+        state.bookProcessingFeedback = {
+          bookId,
+          tone: response.ok ? "success" : "error",
+          message: response.ok ? "Output folder opened." : response.error?.message ?? "Output folder could not be opened."
+        };
+        renderCurrentRoute();
+      });
+    }
     if (target.dataset.action === "validate-brand" && !state.brandDirty && !state.brandSaving) {
       const brandId = target.dataset.brandId;
       state.brandValidationFeedback = null;
@@ -669,6 +816,10 @@ function initializeWorkspace(documentRoot, render) {
       updateBrandSearch(target.value);
       return;
     }
+    if (target.dataset?.action === "search-books") {
+      updateBookSearch(target.value);
+      return;
+    }
     const form = target.closest?.('[data-form="brand-settings"]');
     if (!form || state.brandSaving) return;
     state.brandDirty = hasBrandSettingsChanged(brandSettingsValue(new FormData(form)), state.brandBaseline);
@@ -716,6 +867,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
+const api = { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

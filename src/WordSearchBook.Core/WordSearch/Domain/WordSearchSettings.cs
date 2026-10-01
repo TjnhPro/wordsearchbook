@@ -33,7 +33,11 @@ public sealed record KeywordListSettings(
 
 public sealed record AnswerLineSettings(float Width, string Color);
 
-public sealed record GlobalWordSearchSettings(BoardSize Board, PageSize Page);
+public sealed record GlobalWordSearchSettings(
+    BoardSize Board,
+    PageSize Page,
+    int MaximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
+    int MaximumProcessingConcurrency = WordSearchSettingsDefaults.MaximumProcessingConcurrency);
 
 public static class WordSearchSettingsDefaults
 {
@@ -41,10 +45,15 @@ public static class WordSearchSettingsDefaults
     public const int BoardHeight = 20;
     public const int PageWidth = 2588;
     public const int PageHeight = 3375;
+    public const int MaximumKeywordLength = 13;
+    public const int MaximumProcessingConcurrency = 4;
+    public const int MaximumSupportedProcessingConcurrency = 12;
 
     public static GlobalWordSearchSettings CreateGlobal() => new(
         new BoardSize(BoardWidth, BoardHeight),
-        new PageSize(PageWidth, PageHeight));
+        new PageSize(PageWidth, PageHeight),
+        MaximumKeywordLength,
+        MaximumProcessingConcurrency);
 
     public static BrandWordSearchSettings CreateBrand() => new(
         new AnchoredTextSettings(1200, 100, new FontSettings("Arial", 36, "#1A1A1A"), TextAlignment.Center),

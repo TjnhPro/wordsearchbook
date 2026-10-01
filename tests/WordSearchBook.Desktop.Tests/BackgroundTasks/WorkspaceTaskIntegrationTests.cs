@@ -44,7 +44,7 @@ public sealed class WorkspaceTaskIntegrationTests
     }
 
     [Fact]
-    public async Task EnqueuedGenerationProducesCacheAndReturnsFreshWorkspaceSnapshot()
+    public async Task EnqueuedValidationAndProcessingPublishOutputAndReturnFreshWorkspaceSnapshot()
     {
         var root = await CopyFixtureToTemporaryRootAsync();
         try
@@ -64,19 +64,31 @@ public sealed class WorkspaceTaskIntegrationTests
             Assert.True(manager.TryGetResult<BrandValidationTaskResult>(validationTask.TaskId, out var validationResult));
             Assert.True(validationResult!.Validation.IsSuccess);
 
-            var task = await manager.StartAsync(
-                BackgroundTaskKind.BookGeneration,
-                "sample-book:demo",
+            var dataValidationTask = await manager.StartAsync(
+                BackgroundTaskKind.BookDataValidation,
+                "book-data:sample-book",
                 "sample-book",
-                new BookGenerationTaskRequest(root, "sample-book", "demo"));
+                new BookDataValidationRequest(root, "sample-book"));
+            Assert.True(await manager.WaitAsync(dataValidationTask.TaskId, TimeSpan.FromSeconds(10)));
+            Assert.True(manager.TryGetResult<BookDataValidationTaskResult>(dataValidationTask.TaskId, out var dataValidationResult));
+            Assert.True(dataValidationResult!.Validation.IsSuccess);
 
-            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(10)));
+            var task = await manager.StartAsync(
+                BackgroundTaskKind.BookProcessing,
+                "book-process:sample-book",
+                "sample-book",
+                new BookProcessingTaskRequest(root, "sample-book", "demo"));
+
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(30)));
             var completed = await manager.GetAsync(task.TaskId);
             Assert.Equal(BackgroundTaskState.Completed, completed!.State);
-            Assert.True(manager.TryGetResult<WorkspaceSnapshot>(task.TaskId, out var snapshot));
-            var book = Assert.Single(snapshot!.Books);
+            Assert.True(manager.TryGetResult<BookProcessingTaskResult>(task.TaskId, out var processingResult));
+            var book = Assert.Single(processingResult!.Snapshot.Books);
             Assert.Contains("demo", book.CachedBrandIds);
-            Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", ".workspace", "cache", "demo", "manifest.json")));
+            Assert.Equal(BookOutputStatus.Ready, book.Output!.Status);
+            Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", ".workspace", "cache", "manifest.json")));
+            Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", "output", "sample-book.interior.pdf")));
+            Assert.True(File.Exists(Path.Combine(root, "input", "sample-book", "output", "answer", "001.jpg")));
         }
         finally
         {
@@ -123,6 +135,14 @@ public sealed class WorkspaceTaskIntegrationTests
         Directory.CreateDirectory(destination);
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
+            var relativePath = Path.GetRelativePath(source, file);
+            var segments = relativePath.Split(Path.DirectorySeparatorChar);
+            if (segments.Contains(".workspace", StringComparer.OrdinalIgnoreCase) ||
+                segments.Contains("output", StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var target = file.Replace(source, destination, StringComparison.Ordinal);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(file, target);

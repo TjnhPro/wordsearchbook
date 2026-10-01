@@ -14,7 +14,8 @@ public sealed class WebViewBridgeRouter(
     IApplicationInfoProvider applicationInfoProvider,
     IBackgroundTaskManager taskManager,
     IApplicationRootProvider rootProvider,
-    IBrandFolderActionService brandFolderActionService)
+    IBrandFolderActionService brandFolderActionService,
+    IBookOutputFolderActionService bookOutputFolderActionService)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -44,7 +45,9 @@ public sealed class WebViewBridgeRouter(
                         "Workspace",
                         new WorkspaceRefreshRequest(rootProvider.RootPath),
                         cancellationToken))),
-                "book.generate" => await StartGenerationAsync(request, cancellationToken),
+                "book.data.validate" => await ValidateBookDataAsync(request, cancellationToken),
+                "book.process" => await StartProcessingAsync(request, cancellationToken),
+                "book.output.open" => await OpenBookOutputAsync(request, cancellationToken),
                 "book.brand.assign" => await SaveAssignmentAsync(request, cancellationToken),
                 "brand.create" => await CreateBrandAsync(request, cancellationToken),
                 "brand.validate" => await ValidateBrandAsync(request, cancellationToken),
@@ -70,22 +73,49 @@ public sealed class WebViewBridgeRouter(
         {
             return Serialize(Failure(request.Id, exception.Code, exception.Message));
         }
+        catch (BookOutputFolderActionException exception)
+        {
+            return Serialize(Failure(request.Id, exception.Code, exception.Message));
+        }
         catch (ObjectDisposedException)
         {
             return Serialize(Failure(request.Id, "desktop_unavailable", "The desktop task service is shutting down."));
         }
     }
 
-    private async ValueTask<BridgeResponse> StartGenerationAsync(BridgeRequest request, CancellationToken cancellationToken)
+    private async ValueTask<BridgeResponse> ValidateBookDataAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var bookId = ReadSafeBookId(request.Payload);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.BookDataValidation,
+            $"book-data:{bookId}",
+            bookId,
+            new BookDataValidationRequest(rootProvider.RootPath, bookId),
+            cancellationToken);
+        return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> StartProcessingAsync(BridgeRequest request, CancellationToken cancellationToken)
     {
         var (bookId, brandId) = ReadBookAndBrand(request.Payload);
         var task = await taskManager.StartAsync(
-            BackgroundTaskKind.BookGeneration,
-            $"{bookId}:{brandId}",
+            BackgroundTaskKind.BookProcessing,
+            $"book-process:{bookId}",
             bookId,
-            new BookGenerationTaskRequest(rootProvider.RootPath, bookId, brandId),
+            new BookProcessingTaskRequest(rootProvider.RootPath, bookId, brandId),
             cancellationToken);
         return Success(request.Id!, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+    }
+
+    private async ValueTask<BridgeResponse> OpenBookOutputAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var bookId = ReadSafeBookId(request.Payload);
+        await bookOutputFolderActionService.OpenAsync(rootProvider.RootPath, bookId, cancellationToken);
+        return Success(request.Id!, "book.output.opened", new BookOutputFolderOpened(bookId));
     }
 
     private async ValueTask<BridgeResponse> SaveAssignmentAsync(BridgeRequest request, CancellationToken cancellationToken)
@@ -204,6 +234,8 @@ public sealed class WebViewBridgeRouter(
         WorkspaceSnapshot? result = null;
         BrandValidationResult? brandValidationResult = null;
         BrandPagePreviewResult? brandPagePreviewResult = null;
+        BookDataValidationResult? bookDataValidationResult = null;
+        BookProcessingResult? bookProcessingResult = null;
         if (task.State == BackgroundTaskState.Completed)
         {
             if (taskManager.TryGetResult<BrandValidationTaskResult>(taskId, out var validationTaskResult))
@@ -214,6 +246,16 @@ public sealed class WebViewBridgeRouter(
             else if (taskManager.TryGetResult<BrandPagePreviewResult>(taskId, out var previewResult))
             {
                 brandPagePreviewResult = previewResult;
+            }
+            else if (taskManager.TryGetResult<BookDataValidationTaskResult>(taskId, out var dataValidationTaskResult))
+            {
+                result = dataValidationTaskResult!.Snapshot;
+                bookDataValidationResult = dataValidationTaskResult.Validation;
+            }
+            else if (taskManager.TryGetResult<BookProcessingTaskResult>(taskId, out var processingTaskResult))
+            {
+                result = processingTaskResult!.Snapshot;
+                bookProcessingResult = processingTaskResult.Processing;
             }
             else
             {
@@ -228,7 +270,9 @@ public sealed class WebViewBridgeRouter(
                 BackgroundTaskBridgeSnapshot.From(task),
                 result,
                 brandValidationResult,
-                brandPagePreviewResult));
+                brandPagePreviewResult,
+                bookDataValidationResult,
+                bookProcessingResult));
     }
 
     private async ValueTask<BridgeResponse> CancelTaskAsync(BridgeRequest request, CancellationToken cancellationToken)
@@ -252,7 +296,23 @@ public sealed class WebViewBridgeRouter(
         var brandId = brandValue.GetString();
         ArgumentException.ThrowIfNullOrWhiteSpace(bookId);
         ArgumentException.ThrowIfNullOrWhiteSpace(brandId);
+        ValidateSafeSegment(bookId, "bookId");
+        ValidateSafeSegment(brandId, "brandId");
         return (bookId, brandId);
+    }
+
+    private static string ReadSafeBookId(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } value ||
+            !value.TryGetProperty("bookId", out var bookValue))
+        {
+            throw new ArgumentException("bookId is required.");
+        }
+
+        var bookId = bookValue.GetString();
+        ArgumentException.ThrowIfNullOrWhiteSpace(bookId);
+        ValidateSafeSegment(bookId, "bookId");
+        return bookId;
     }
 
     private static BackgroundTaskId ReadTaskId(JsonElement? payload)
@@ -277,15 +337,19 @@ public sealed class WebViewBridgeRouter(
 
         var brandId = brandValue.GetString();
         ArgumentException.ThrowIfNullOrWhiteSpace(brandId);
-        if (brandId is "." or ".." ||
-            brandId.Contains('/') ||
-            brandId.Contains('\\') ||
-            brandId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            throw new ArgumentException("brandId must be a single safe path segment.");
-        }
-
+        ValidateSafeSegment(brandId, "brandId");
         return brandId;
+    }
+
+    private static void ValidateSafeSegment(string value, string name)
+    {
+        if (value is "." or ".." ||
+            value.Contains('/') ||
+            value.Contains('\\') ||
+            value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException($"{name} must be a single safe path segment.");
+        }
     }
 
     private static T ReadSettings<T>(JsonElement? payload)

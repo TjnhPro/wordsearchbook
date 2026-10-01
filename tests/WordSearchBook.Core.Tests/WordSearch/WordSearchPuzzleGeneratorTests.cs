@@ -47,6 +47,9 @@ public sealed class WordSearchPuzzleGeneratorTests
             new WordSearchPuzzleGenerator().Generate(["TOOLONG"], new BoardSize(4, 4)));
 
         Assert.Equal("word_too_long", exception.Code);
+        Assert.Equal(
+            "Word Search Key 'TOOLONG' has 7 letters; the maximum is 4. Shorten the Word Search Key.",
+            exception.Message);
     }
 
     private static void AssertStraightPlacement(WordPlacement placement)
