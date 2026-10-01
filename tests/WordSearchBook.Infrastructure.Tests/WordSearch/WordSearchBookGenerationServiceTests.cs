@@ -59,10 +59,17 @@ public sealed class WordSearchBookGenerationServiceTests
 
             var sentinel = Path.Combine(cacheDirectory, "old-cache.txt");
             await File.WriteAllTextAsync(sentinel, "old");
+            var legacyBrandCache = Path.Combine(cacheDirectory, "legacy-brand");
+            Directory.CreateDirectory(legacyBrandCache);
+            await File.WriteAllTextAsync(Path.Combine(legacyBrandCache, "manifest.json"), "old");
             var secondResult = await service.GenerateAsync(request);
 
             Assert.False(File.Exists(sentinel));
+            Assert.False(Directory.Exists(legacyBrandCache));
             Assert.True(File.Exists(secondResult.ManifestPath));
+            Assert.Equal(
+                Path.Combine(root, "input", "sample-book", ".workspace", "cache", "manifest.json"),
+                secondResult.ManifestPath);
         }
         finally
         {

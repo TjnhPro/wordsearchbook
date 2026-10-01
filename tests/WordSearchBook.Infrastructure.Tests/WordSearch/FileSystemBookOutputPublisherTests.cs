@@ -91,6 +91,7 @@ public sealed class FileSystemBookOutputPublisherTests
 
             Assert.Equal("output_file_in_use", exception.Code);
             Assert.Contains(finalPdf, exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("old-pdf", await File.ReadAllTextAsync(finalPdf));
             Assert.Equal("old-answer", await File.ReadAllTextAsync(finalAnswer));
             Assert.Equal("old-manifest", await File.ReadAllTextAsync(manifest));
             Assert.True(File.Exists(pendingAnswer));

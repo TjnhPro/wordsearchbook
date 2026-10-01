@@ -23,8 +23,12 @@ public sealed class FileSystemBookOutputPublisher : IBookOutputPublisher
         var expectedAnswerPaths = request.Answers
             .Select(answer => Path.GetFullPath(answer.FinalPath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var obsoleteAnswers = Directory.EnumerateFiles(answerDirectory, "*.jpg", SearchOption.TopDirectoryOnly)
-            .Where(path => !expectedAnswerPaths.Contains(Path.GetFullPath(path)))
+        var pendingAnswerPaths = request.Answers
+            .Select(answer => Path.GetFullPath(answer.PendingPath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var obsoleteAnswers = Directory.EnumerateFiles(answerDirectory, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => !expectedAnswerPaths.Contains(Path.GetFullPath(path)) &&
+                           !pendingAnswerPaths.Contains(Path.GetFullPath(path)))
             .ToArray();
         var finalTargets = request.Answers.Select(answer => answer.FinalPath)
             .Append(request.Pdf.FinalPath)

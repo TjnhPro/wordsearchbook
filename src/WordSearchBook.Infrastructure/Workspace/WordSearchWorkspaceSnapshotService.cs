@@ -196,7 +196,7 @@ public sealed class WordSearchWorkspaceSnapshotService(
             var brandId = manifest.RootElement.GetProperty("brandId").GetString();
             return string.IsNullOrWhiteSpace(brandId) ? [] : [brandId];
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException)
         {
             return [];
         }
