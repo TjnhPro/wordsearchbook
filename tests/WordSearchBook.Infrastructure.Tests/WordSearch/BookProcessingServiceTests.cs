@@ -30,6 +30,7 @@ public sealed class BookProcessingServiceTests
         try
         {
             SaveImage(Path.Combine(root, "brands", "demo", "page_layout.png"), Color.White);
+            SaveFrontOverlay(Path.Combine(root, "brands", "demo", "front_layout.png"));
             var front = Path.Combine(root, "brands", "demo", "front");
             var back = Path.Combine(root, "brands", "demo", "back");
             Directory.CreateDirectory(front);
@@ -56,11 +57,18 @@ public sealed class BookProcessingServiceTests
             Assert.Equal(85, answer.Quality);
             Assert.Equal("answer/001.jpg", answer.RelativePath);
             var answerPath = Path.Combine(root, "input", "sample-book", "output", "answer", "001.jpg");
-            using (var image = Image.FromFile(answerPath))
+            using (var image = new Bitmap(answerPath))
             {
                 Assert.Equal(ImageFormat.Jpeg.Guid, image.RawFormat.Guid);
                 Assert.Equal((2588, 3375), (image.Width, image.Height));
                 Assert.InRange(image.HorizontalResolution, 299.5f, 300.5f);
+                Assert.NotEqual(Color.Lime.ToArgb(), image.GetPixel(210, 410).ToArgb());
+            }
+
+            var cachedPagePath = Path.Combine(root, "input", "sample-book", ".workspace", "cache", "topics", "001", "page.png");
+            using (var cachedPage = new Bitmap(cachedPagePath))
+            {
+                Assert.Equal(Color.Lime.ToArgb(), cachedPage.GetPixel(210, 410).ToArgb());
             }
 
             using (var pdf = PdfReader.Open(result.PdfPath, PdfDocumentOpenMode.Import))
@@ -217,6 +225,32 @@ public sealed class BookProcessingServiceTests
         image.Save(path, format ?? ImageFormat.Png);
     }
 
+    private static void SaveTransparentFrontLayout(string path)
+    {
+        using var image = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb);
+        image.SetResolution(300, 300);
+        using (var graphics = Graphics.FromImage(image))
+        {
+            graphics.Clear(Color.Transparent);
+        }
+
+        image.Save(path, ImageFormat.Png);
+    }
+
+    private static void SaveFrontOverlay(string path)
+    {
+        using var image = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb);
+        image.SetResolution(300, 300);
+        using (var graphics = Graphics.FromImage(image))
+        {
+            graphics.Clear(Color.Transparent);
+            using var brush = new SolidBrush(Color.Lime);
+            graphics.FillRectangle(brush, 205, 405, 20, 20);
+        }
+
+        image.Save(path, ImageFormat.Png);
+    }
+
     private static string CopyFixtureToTemporaryRoot()
     {
         var source = Path.Combine(AppContext.BaseDirectory, "TestData", "SingleTopicBook");
@@ -236,6 +270,10 @@ public sealed class BookProcessingServiceTests
             Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
             File.Copy(sourceFile, destinationFile);
         }
+
+        var brandDirectory = Path.Combine(destination, "brands", "demo");
+        SaveImage(Path.Combine(brandDirectory, "page_layout.png"), Color.White);
+        SaveTransparentFrontLayout(Path.Combine(brandDirectory, "front_layout.png"));
 
         return destination;
     }

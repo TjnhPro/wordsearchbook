@@ -283,6 +283,14 @@ public sealed class WordSearchBookGenerationServiceTests
             layout.Save(layoutPath, ImageFormat.Png);
         }
 
+        var frontLayoutPath = Path.Combine(destination, "brands", "demo", "front_layout.png");
+        using (var frontLayout = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb))
+        {
+            using var graphics = Graphics.FromImage(frontLayout);
+            graphics.Clear(Color.Transparent);
+            frontLayout.Save(frontLayoutPath, ImageFormat.Png);
+        }
+
         return destination;
     }
 }

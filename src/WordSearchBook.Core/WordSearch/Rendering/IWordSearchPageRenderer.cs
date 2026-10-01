@@ -7,6 +7,7 @@ public interface IWordSearchPageRenderer
 {
     RenderedWordSearchArtifact Render(
         string pageLayoutPath,
+        string frontLayoutPath,
         WordSearchTopic topic,
         int pageNumber,
         RenderedWordSearchArtifact boardArtifact,

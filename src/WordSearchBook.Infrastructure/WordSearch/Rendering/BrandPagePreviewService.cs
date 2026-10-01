@@ -28,6 +28,7 @@ public sealed class BrandPagePreviewService(
         var certificatePath = JsonBrandValidationStateStore.ResolvePath(rootPath, brandId);
         var brandDirectory = Path.GetDirectoryName(certificatePath)!;
         var layoutPath = Path.Combine(brandDirectory, "page_layout.png");
+        var frontLayoutPath = Path.Combine(brandDirectory, "front_layout.png");
         var outputPath = Path.Combine(brandDirectory, BrandPagePreviewSample.OutputFileName);
         var settings = await settingsReader.ReadAsync(rootPath, brandId, cancellationToken);
         var topic = BrandPagePreviewSample.CreateTopic();
@@ -37,6 +38,7 @@ public sealed class BrandPagePreviewService(
         var board = boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame);
         var page = pageRenderer.Render(
             layoutPath,
+            frontLayoutPath,
             topic,
             BrandPagePreviewSample.PageNumber,
             board,
