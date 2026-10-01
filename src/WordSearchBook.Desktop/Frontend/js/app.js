@@ -9,7 +9,7 @@ const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
 const state = {
   route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null,
   bookSearchQuery: "", selectedBookTab: "overview", bookValidationFeedback: null, bookProcessingFeedback: null,
-  brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false, brandSettingsRequireSave: false,
+  brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false, brandSettingsRequireSave: false, brandSettingsUpdateReasonCode: null,
   brandSaving: false, brandValidationFeedback: null, brandPreviewFeedback: null,
   pendingNavigation: null, client: null, pollTimers: new Map()
 };
@@ -28,6 +28,11 @@ function brandValidationPresentation(validation) {
   return { label: "Not validated", tone: "neutral" };
 }
 function canGenerateWithBrand(brand) { return brand?.validation?.status === "Validated" && !brand?.settingsRequireSave; }
+function requiredBrandSettingsMessage(reasonCode) {
+  return reasonCode === "qr_settings_required"
+    ? "Save the QR Page settings before validating, previewing, or processing."
+    : "Save Brand once to add the required Quote settings before validating, previewing, or processing.";
+}
 function bookDataValidationPresentation(validation) {
   const status = validation?.status ?? "NotValidated";
   if (status === "Validated") return { label: "Validated", tone: "good" };
@@ -179,14 +184,14 @@ function renderBooks() {
     : !selectedBrand
       ? "Choose a Brand before processing."
       : selectedBrandRecord?.settingsRequireSave
-        ? "Open Brand layouts and save this Brand once to add the required Quote settings."
+        ? `Open Brand layouts. ${requiredBrandSettingsMessage(selectedBrandRecord.settingsUpdateReasonCode)}`
       : selectedBrandRecord?.issue
         ? selectedBrandRecord.issue.message
         : !selectedBrandValidated
           ? "Validate this Brand in Brand layouts before processing."
           : "";
   const processingFeedback = state.bookProcessingFeedback?.bookId === selected.id ? state.bookProcessingFeedback : null;
-  const outputPanel = `<div class="book-tab-panel"><div class="book-output-header"><div><span>Output status</span><div>${badge(outputPresentation.label, outputPresentation.tone)}</div></div><div><span>Last processed</span><strong>${escapeHtml(formatDate(output.processedAtUtc))}</strong></div></div><label class="field"><span>Brand</span><select data-action="assign-brand" data-book-id="${escapeHtml(selected.id)}" ${processingActive ? "disabled" : ""}>${options}</select></label>${guidance ? `<p class="generation-guidance">${escapeHtml(guidance)}</p>` : ""}<dl class="output-summary-grid"><div><dt>PDF</dt><dd>${escapeHtml(output.pdfFileName ?? `${selected.id}.interior.pdf`)}</dd><small>${formatBytes(output.pdfLengthBytes)}</small></div><div><dt>PDF pages</dt><dd>${output.pdfPageCount ?? 0}</dd><small>${output.frontPageCount ?? 0} front · ${output.puzzlePageCount ?? 0} puzzle · ${output.backPageCount ?? 0} back</small></div><div><dt>Answers</dt><dd>${output.answerCount ?? 0} JPG</dd><small>${formatBytes(output.answerLengthBytes)} · quality 85</small></div><div><dt>Print raster</dt><dd>2588 × 3375</dd><small>300 pixels / inch</small></div></dl>${output.reasonCode ? `<p class="output-stale-reason">${escapeHtml(output.reasonCode)}</p>` : ""}${processingFeedback ? `<p class="book-process-feedback" data-state="${escapeHtml(processingFeedback.tone)}">${escapeHtml(processingFeedback.message)}</p>` : ""}<div class="action-row"><button class="button-primary" data-action="process-book" data-book-id="${escapeHtml(selected.id)}" data-brand-id="${escapeHtml(selectedBrand)}" ${processAllowed ? "" : "disabled"}>${processingActive ? "Processing…" : "Process"}</button><button class="button-secondary" data-action="open-book-output" data-book-id="${escapeHtml(selected.id)}" ${output.status === "Ready" || output.status === "Stale" ? "" : "disabled"}>Open folder</button></div></div>`;
+  const outputPanel = `<div class="book-tab-panel"><div class="book-output-header"><div><span>Output status</span><div>${badge(outputPresentation.label, outputPresentation.tone)}</div></div><div><span>Last processed</span><strong>${escapeHtml(formatDate(output.processedAtUtc))}</strong></div></div><label class="field"><span>Brand</span><select data-action="assign-brand" data-book-id="${escapeHtml(selected.id)}" ${processingActive ? "disabled" : ""}>${options}</select></label>${guidance ? `<p class="generation-guidance">${escapeHtml(guidance)}</p>` : ""}<dl class="output-summary-grid"><div><dt>PDF</dt><dd>${escapeHtml(output.pdfFileName ?? `${selected.id}.interior.pdf`)}</dd><small>${formatBytes(output.pdfLengthBytes)}</small></div><div><dt>PDF pages</dt><dd>${output.pdfPageCount ?? 0}</dd><small>${output.frontPageCount ?? 0} front · ${output.puzzlePageCount ?? 0} puzzle · ${output.backPageCount ?? 0} back · ${output.qrPageCount ?? 0} QR</small></div><div><dt>Answers</dt><dd>${output.answerCount ?? 0} JPG</dd><small>${formatBytes(output.answerLengthBytes)} · quality 85</small></div><div><dt>Print raster</dt><dd>2588 × 3375</dd><small>300 pixels / inch</small></div></dl>${output.reasonCode ? `<p class="output-stale-reason">${escapeHtml(output.reasonCode)}</p>` : ""}${processingFeedback ? `<p class="book-process-feedback" data-state="${escapeHtml(processingFeedback.tone)}">${escapeHtml(processingFeedback.message)}</p>` : ""}<div class="action-row"><button class="button-primary" data-action="process-book" data-book-id="${escapeHtml(selected.id)}" data-brand-id="${escapeHtml(selectedBrand)}" ${processAllowed ? "" : "disabled"}>${processingActive ? "Processing…" : "Process"}</button><button class="button-secondary" data-action="open-book-output" data-book-id="${escapeHtml(selected.id)}" ${output.status === "Ready" || output.status === "Stale" ? "" : "disabled"}>Open folder</button></div></div>`;
   const detail = state.selectedBookTab === "output" ? outputPanel : overview;
   return `<div class="book-workspace"><section class="panel book-list-panel"><div class="book-panel-header"><div><h3>Books</h3><p data-book-result-count>${filteredBooks.length} of ${books.length} shown</p></div><button class="button-secondary" data-action="refresh">Refresh</button></div><label class="book-search"><span class="sr-only">Search books</span><input type="search" data-action="search-books" value="${escapeHtml(state.bookSearchQuery)}" placeholder="Search folder name…" autocomplete="off"></label><div class="book-list-scroll" data-book-list>${bookRowsMarkup(filteredBooks, selected.id)}</div></section><section class="panel book-detail-panel"><div class="book-detail-header"><div><p class="eyebrow">Book detail</p><h3>${escapeHtml(selected.id)}</h3></div><div class="badge-row">${badge(dataPresentation.label, dataPresentation.tone)}${badge(outputPresentation.label, outputPresentation.tone)}</div></div><div class="book-tabs" role="tablist"><button type="button" role="tab" data-action="select-book-tab" data-tab="overview" aria-selected="${state.selectedBookTab === "overview"}">Overview</button><button type="button" role="tab" data-action="select-book-tab" data-tab="output" aria-selected="${state.selectedBookTab === "output"}">Output</button></div><div class="book-detail-scroll">${detail}</div></section></div>`;
 }
@@ -261,7 +266,7 @@ function brandLayoutPanels(brand) {
     : "";
   const validatedAt = validation.validatedAtUtc ? new Date(validation.validatedAtUtc).toLocaleString() : "Never";
   const guardMessage = state.brandSettingsRequireSave
-    ? "Save Brand once to add the required Quote settings before validating or drawing a demo."
+    ? requiredBrandSettingsMessage(brand.settingsUpdateReasonCode)
     : guarded ? "Save or discard settings changes before validating or drawing a demo." : "";
   const previewFeedback = state.brandPreviewFeedback?.brandId === brand.id ? state.brandPreviewFeedback : null;
   const previewFeedbackMarkup = `<p class="page-preview-feedback ${previewFeedback ? "" : "hidden"}" data-brand-preview-feedback data-state="${escapeHtml(previewFeedback?.tone ?? "neutral")}" role="status">${escapeHtml(previewFeedback?.message ?? "")}</p>`;
@@ -302,6 +307,24 @@ function brandAssetPanels(brand) {
     .join("");
 }
 
+function brandQrPageEditor(brand, settings) {
+  const asset = brand.qrPage ?? { relativePath: "page_qr.png", exists: false, extension: ".png", status: "NotValidated" };
+  const failures = state.brandValidationFeedback?.brandId === brand.id
+    ? state.brandValidationFeedback.failures ?? []
+    : [];
+  const failure = failures.find(item => String(item.target ?? "").toLocaleLowerCase() === "page_qr.png");
+  const presentation = failure
+    ? { label: "Invalid", tone: "bad" }
+    : brandValidationPresentation({ status: asset.status });
+  if (!asset.exists) {
+    return `<fieldset class="settings-group brand-region-card brand-asset-card"><legend>QR Page</legend><div class="brand-asset-heading"><div><code>page_qr.png</code><p>Optional PNG · 2588 × 3375 px</p></div><div>${badge("Optional")}${badge("Not used")}</div></div><div class="brand-asset-empty"><strong>No page_qr.png — QR disabled</strong><p>Add the file to this Brand folder to enable a final QR page.</p></div></fieldset>`;
+  }
+
+  const qr = settings ?? { x: 994, y: 2400, size: 600, domainName: "" };
+  const failureMarkup = failure ? `<p class="brand-validation-reason">${escapeHtml(failure.message)}</p>` : "";
+  return `<fieldset class="settings-group brand-region-card brand-asset-card"><legend>QR Page</legend><input type="hidden" name="qrPage.enabled" value="true"><div class="brand-asset-heading"><div><code>${escapeHtml(asset.relativePath ?? "page_qr.png")}</code><p>Optional PNG · 2588 × 3375 px</p></div><div>${badge("Active", "good")}${badge(presentation.label, presentation.tone)}</div></div><p class="brand-region-help">Adds the final interior page. The QR opens https://wordsearch.{domain}/{book-folder}; Size is one square side.</p>${failureMarkup}<div class="brand-region-fields">${settingInput("qrPage.x", "X", qr.x, "number", "min=\"0\"")}${settingInput("qrPage.y", "Y", qr.y, "number", "min=\"0\"")}${settingInput("qrPage.size", "Size", qr.size, "number", "min=\"1\" max=\"2588\"")}${settingInput("qrPage.domainName", "Domain name", qr.domainName, "text", "placeholder=\"example.com\" autocomplete=\"off\"")}</div></fieldset>`;
+}
+
 function renderBrands() {
   if (!state.snapshot) return `<div class="empty-panel"><p class="empty-panel-title">Loading brands…</p></div>`;
   const brands = state.snapshot.brands ?? [];
@@ -311,6 +334,7 @@ function renderBrands() {
   }
   const selected = brands.find(brand => brand.id === state.selectedBrandId);
   state.brandSettingsRequireSave = Boolean(selected.settingsRequireSave);
+  state.brandSettingsUpdateReasonCode = selected.settingsUpdateReasonCode ?? null;
   if (state.brandBaselineId !== selected.id || !state.brandDirty) {
     state.brandBaselineId = selected.id;
     state.brandBaseline = selected.settings ? canonicalBrandSettings(selected.settings) : null;
@@ -324,7 +348,7 @@ function renderBrands() {
   }
   const settings = selected.settings;
   const saveStatus = selected.settingsRequireSave ? "Settings update required" : "All changes saved";
-  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="${selected.settingsRequireSave ? "dirty" : "saved"}">${saveStatus}</span><button class="button-primary" data-brand-save-button type="submit" ${selected.settingsRequireSave ? "" : "disabled"}>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${brandLayoutPanels(selected)}${anchoredTextEditor("topic", "Topic", settings.topic)}${textRegionEditor("quote", "Quote", settings.quote, "Centered horizontally and vertically; wraps at spaces only, up to two lines.")}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}${keywordListEditor(settings.keywordList)}${boardGameEditor(settings.boardGame, settings.answerLine)}${brandAssetPanels(selected)}</div></div></form>`;
+  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="${selected.settingsRequireSave ? "dirty" : "saved"}">${saveStatus}</span><button class="button-primary" data-brand-save-button type="submit" ${selected.settingsRequireSave ? "" : "disabled"}>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${brandLayoutPanels(selected)}${anchoredTextEditor("topic", "Topic", settings.topic)}${textRegionEditor("quote", "Quote", settings.quote, "Centered horizontally and vertically; wraps at spaces only, up to two lines.")}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}${keywordListEditor(settings.keywordList)}${boardGameEditor(settings.boardGame, settings.answerLine)}${brandQrPageEditor(selected, settings.qrPage)}${brandAssetPanels(selected)}</div></div></form>`;
   return `<div class="brand-workspace">${list}${detail}</div>`;
 }
 
@@ -363,7 +387,10 @@ function globalSettingsValue(data) {
   return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: fixedPageSize, maximumKeywordLength: numberValue(data, "maximumKeywordLength"), maximumProcessingConcurrency: numberValue(data, "maximumProcessingConcurrency") };
 }
 function brandSettingsValue(data) {
-  return { topic: anchoredTextValue(data, "topic"), quote: regionValue(data, "quote"), boardGame: regionValue(data, "boardGame"), keywordList: keywordListValue(data), pageNumber: anchoredTextValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
+  const qrPage = data.get("qrPage.enabled") === "true"
+    ? { x: numberValue(data, "qrPage.x"), y: numberValue(data, "qrPage.y"), size: numberValue(data, "qrPage.size"), domainName: String(data.get("qrPage.domainName") ?? "") }
+    : null;
+  return { topic: anchoredTextValue(data, "topic"), quote: regionValue(data, "quote"), boardGame: regionValue(data, "boardGame"), keywordList: keywordListValue(data), pageNumber: anchoredTextValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") }, qrPage };
 }
 
 function routeMarkup(routeName) {
@@ -465,7 +492,7 @@ function refreshBrandFormState(documentRoot) {
   }
   if (validationGuard) {
     validationGuard.textContent = state.brandSettingsRequireSave
-      ? "Save Brand once to add the required Quote settings before validating or drawing a demo."
+      ? requiredBrandSettingsMessage(state.brandSettingsUpdateReasonCode)
       : state.brandDirty || state.brandSaving ? "Save or discard settings changes before validating or drawing a demo." : "";
   }
   const previewButton = documentRoot.querySelector("[data-brand-preview-button]");
@@ -597,6 +624,7 @@ function initializeWorkspace(documentRoot, render) {
 
         state.brandDirty = false;
         state.brandSettingsRequireSave = false;
+        state.brandSettingsUpdateReasonCode = null;
         state.brandBaseline = canonicalBrandSettings(settings);
         const destination = state.pendingNavigation;
         state.pendingNavigation = null;
@@ -883,6 +911,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
+const api = { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandQrPageEditor, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

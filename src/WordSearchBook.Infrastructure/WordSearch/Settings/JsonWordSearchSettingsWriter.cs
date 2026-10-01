@@ -136,6 +136,7 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ValidateSegment(brandId, nameof(brandId));
         ArgumentNullException.ThrowIfNull(settings);
+        settings = JsonWordSearchSettingsReader.NormalizeBrand(settings);
         var path = Path.Combine(rootPath, "brands", brandId, "settings.json");
         if (!File.Exists(path))
         {
@@ -144,6 +145,18 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
 
         var global = await settingsReader.ReadGlobalAsync(rootPath, cancellationToken);
         JsonWordSearchSettingsReader.ValidateBrand(global, settings);
+        var qrPagePath = Path.Combine(
+            rootPath,
+            "brands",
+            brandId,
+            BrandValidationDefinition.QrPageRelativePath);
+        if (File.Exists(qrPagePath) && settings.QrPage is null)
+        {
+            throw new WordSearchGenerationException(
+                "qr_settings_required",
+                "QR Page settings are required while page_qr.png is present.");
+        }
+
         await WriteAtomicallyAsync(path, settings, cancellationToken);
     }
 

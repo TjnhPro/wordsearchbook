@@ -3,10 +3,13 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Validation;
+using WordSearchBook.Core.WordSearch.Settings;
 
 namespace WordSearchBook.Infrastructure.WordSearch.Validation;
 
-public sealed class BrandValidationService(IBrandValidationStateStore stateStore) : IBrandValidationService
+public sealed class BrandValidationService(
+    IBrandValidationStateStore stateStore,
+    IWordSearchSettingsReader settingsReader) : IBrandValidationService
 {
     public async ValueTask<BrandValidationState> CheckStateAsync(
         string rootPath,
@@ -66,10 +69,24 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
             {
                 return NeedsValidation("brand_validation_record_invalid", record);
             }
+
+            if (File.Exists(BrandAssetDiscovery.ResolveQrPagePath(rootPath, brandId)))
+            {
+                var global = await settingsReader.ReadGlobalAsync(rootPath, cancellationToken);
+                var settings = await settingsReader.ReadBrandAsync(rootPath, brandId, global, cancellationToken);
+                if (settings.Settings.QrPage is null)
+                {
+                    return NeedsValidation("qr_settings_required", record);
+                }
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return NeedsValidation("brand_validation_state_unavailable", record);
+        }
+        catch (WordSearchGenerationException exception)
+        {
+            return NeedsValidation(exception.Code, record);
         }
 
         return new BrandValidationState(
@@ -95,12 +112,48 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
         var assets = new List<BrandValidationAssetFact>();
         var layoutPath = BrandAssetDiscovery.ResolveLayoutPath(rootPath, brandId);
         var frontLayoutPath = BrandAssetDiscovery.ResolveFrontLayoutPath(rootPath, brandId);
+        var qrPagePath = BrandAssetDiscovery.ResolveQrPagePath(rootPath, brandId);
         ValidateRequiredLayout(
             layoutPath,
             BrandValidationDefinition.PageLayoutRelativePath,
             ImageValidationKind.PageLayout,
             failures,
             assets);
+
+        if (File.Exists(qrPagePath))
+        {
+            var asset = ValidateImage(
+                qrPagePath,
+                BrandValidationDefinition.QrPageRelativePath,
+                ImageValidationKind.QrPage,
+                failures);
+            if (asset is not null)
+            {
+                assets.Add(asset);
+            }
+
+            try
+            {
+                var global = await settingsReader.ReadGlobalAsync(rootPath, cancellationToken);
+                var settings = await settingsReader.ReadBrandAsync(rootPath, brandId, global, cancellationToken);
+                if (settings.Settings.QrPage is null)
+                {
+                    failures.Add(Failure(
+                        BrandValidationDefinition.QrPageRelativePath,
+                        "settings",
+                        "qr_settings_required",
+                        "QR Page settings are required while page_qr.png is present."));
+                }
+            }
+            catch (WordSearchGenerationException exception)
+            {
+                failures.Add(Failure(
+                    BrandValidationDefinition.QrPageRelativePath,
+                    "settings",
+                    exception.Code,
+                    exception.Message));
+            }
+        }
         ValidateRequiredLayout(
             frontLayoutPath,
             BrandValidationDefinition.FrontLayoutRelativePath,
@@ -363,6 +416,7 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
     {
         ImageValidationKind.PageLayout => new(true, "page_layout", "Page layout"),
         ImageValidationKind.FrontLayout => new(true, "front_layout", "Front layout"),
+        ImageValidationKind.QrPage => new(true, "qr_page", "QR page"),
         ImageValidationKind.OptionalAsset => new(false, "brand_asset", "Brand asset"),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
@@ -384,6 +438,7 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
     {
         PageLayout,
         FrontLayout,
+        QrPage,
         OptionalAsset
     }
 

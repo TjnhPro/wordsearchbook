@@ -226,9 +226,12 @@ public sealed class BrandValidationWorker(
                 cancellationToken);
             if (settings.RequiresSave)
             {
+                var message = settings.UpdateReasonCode == "qr_settings_required"
+                    ? $"Brand '{request.BrandId}' requires QR Page settings because page_qr.png is present."
+                    : $"Brand '{request.BrandId}' settings must be saved to add Quote settings before validation.";
                 throw new WordSearchGenerationException(
-                    "brand_settings_update_required",
-                    $"Brand '{request.BrandId}' settings must be saved to add Quote settings before validation.");
+                    settings.UpdateReasonCode ?? "brand_settings_update_required",
+                    message);
             }
 
             context.Report("Validating brand assets", subject: request.BrandId);

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandQrPageEditor, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -148,6 +148,11 @@ test("builds a complete typed brand settings payload", () => {
   addAnchor("pageNumber", 31, "Tahoma", "Left");
   values.set("answerLine.width", "2.5");
   values.set("answerLine.color", "#AABBCC");
+  values.set("qrPage.enabled", "true");
+  values.set("qrPage.x", "994");
+  values.set("qrPage.y", "2400");
+  values.set("qrPage.size", "600");
+  values.set("qrPage.domainName", "example.com");
 
   const settings = brandSettingsValue(values);
 
@@ -172,6 +177,12 @@ test("builds a complete typed brand settings payload", () => {
     alignment: "Left"
   });
   assert.deepEqual(settings.answerLine, { width: 2.5, color: "#AABBCC" });
+  assert.deepEqual(settings.qrPage, { x: 994, y: 2400, size: 600, domainName: "example.com" });
+});
+
+test("keeps QR settings null when the optional template is absent", () => {
+  const data = new Map();
+  assert.equal(brandSettingsValue(data).qrPage, null);
 });
 
 test("filters brands by a trimmed case-insensitive name fragment", () => {
@@ -302,6 +313,21 @@ test("renders optional brand folders with empty and per-file validation states",
   assert.match(populated, /Wrong size/);
   assert.match(populated, /final\.png/);
   assert.match(populated, /Validated/);
+});
+
+test("renders QR controls only when page_qr.png exists", () => {
+  const inactive = brandQrPageEditor({ id: "demo", qrPage: { exists: false } }, null);
+  assert.match(inactive, /QR disabled/);
+  assert.doesNotMatch(inactive, /name="qrPage\.size"/);
+
+  const active = brandQrPageEditor({
+    id: "demo",
+    qrPage: { exists: true, relativePath: "page_qr.png", status: "NeedsValidation" }
+  }, { x: 100, y: 200, size: 500, domainName: "example.com" });
+  assert.match(active, /name="qrPage\.enabled"/);
+  assert.match(active, /name="qrPage\.size"[^>]*value="500"/);
+  assert.match(active, /name="qrPage\.domainName"[^>]*value="example\.com"/);
+  assert.match(active, /final interior page/);
 });
 
 test("describes both required page layout layers and puzzle-only foreground", () => {

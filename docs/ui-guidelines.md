@@ -23,12 +23,15 @@
 - Creating a valid default PNG does not certify it. Show `Not validated`, `Validated`, or `Needs validation` separately from settings health.
 - Create Brand also creates empty `front/` and `back/` folders. Existing Brands may omit either folder; missing and empty folders are valid optional states.
 - Front PDF pages and Back PDF pages panels list only direct `.png`, `.jpg`, or `.jpeg` files, use their own bounded list scroll, and show per-file certificate/failure status. Nested and unsupported files remain invisible.
+- Show a separate optional **QR Page** panel for `page_qr.png`. When absent, show QR as disabled and submit `qrPage: null`; when present, expose integer X/Y/Size and Domain Name fields. Size is one square side, not separate width/height.
+- `page_qr.png` must be a `2588x3375` PNG and joins Brand validation/fingerprinting only when present. A newly added template without QR settings is a migration state: require Save before Validate brand, Draw demo, or Process.
+- Explain the URL contract as `https://wordsearch.{domain}/{book-folder}`. QR remains excluded from Puzzle page preview; Process generates it into the book cache and appends it after all Back pages.
 - Deep image validation runs only when the user selects **Validate brand**. Workspace load and refresh may enumerate tracked files, read `brand.validation.json` and compare metadata, but must not decode images.
 - Keep the Page Layout card visible even when Brand or global settings are invalid. Disable validation while the current Brand form is dirty or saving.
 - Keep a **Puzzle page preview** panel beside the Page Layouts card. **Draw demo** uses both required layouts plus saved settings and writes `page_layout.preview.png` beside the source layouts through the background queue.
 - Disable **Draw demo** while the selected Brand has unsaved edits, is saving, or already has an active preview task. **Open folder** remains available and must use the desktop-derived Brand path rather than a path supplied by the frontend.
 - Preview generation is independent from the validation certificate and must never modify either layout source or `brand.validation.json`.
-- Books may list any Brand with readable settings, but **Process** stays disabled until both the CSV certificate and shared Brand certificate for required layouts and optional Front/Back PDF pages are `Validated`, and the Brand has saved Quote settings.
+- Books may list any Brand with readable settings, but **Process** stays disabled until both the CSV certificate and shared Brand certificate for required layouts and optional Front/Back/QR pages are `Validated`, and all required Brand settings are saved.
 - Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
 - Quote uses X/Y/Width/Height plus font name, size, and color. It is always centered horizontally and vertically, preserves casing/punctuation/Unicode, and wraps at spaces only to a maximum of two lines.
 - Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.
@@ -44,6 +47,6 @@
 - Keep search fixed above the list, filter folder names case-insensitively after a `200ms` debounce, and update only list rows while typing. Render at most the first 250 matches and ask for a narrower query beyond that window.
 - Book Detail has exactly two tabs for this phase: **Overview** and **Output**. Preserve the selected tab and book across task refreshes.
 - Overview shows CSV certificate status/hash/time, topic and keyword totals, per-topic `20/20` status, row-aware validation failures and **Validate CSV**. CSV requires one consistent non-empty Quote repeated across every row of a Topic.
-- Output shows Brand selection, ready/stale status, PDF/Answer counts and sizes, fixed `2588x3375` at 300 PPI, **Process**, and **Open folder**.
+- Output shows Brand selection, ready/stale status, PDF/Answer counts and sizes (including QR page count), fixed `2588x3375` at 300 PPI, **Process**, and **Open folder**.
 - Disable Process unless `data.csv` and the selected Brand are both currently `Validated`. Keep Open folder available for ready or stale published output.
 - Validation and processing run through the background queue. Avoid full Books-route redraws during task-only polling so search focus is stable; redraw after a returned workspace snapshot.

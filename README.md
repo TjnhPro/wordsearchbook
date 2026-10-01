@@ -90,6 +90,7 @@ Topic, Keyword và Word Search Key được chuẩn hóa thành chữ hoa khi đ
 ```text
 input/{book}/.workspace/cache/
 ├─ manifest.json
+├─ page-qr.png (optional, generated)
 └─ topics/
    └─ 001/
       ├─ board-game.png
@@ -106,24 +107,27 @@ Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy applicati
 
 Mỗi book lưu chứng nhận CSV tại `input/{book}/.workspace/data.validation.json`. Refresh chỉ so certificate với metadata; nút **Validate CSV** mới đọc nội dung, tính SHA-256 và tổng hợp lỗi theo dòng/topic. **Process** chỉ chạy khi CSV và Brand đang được chứng nhận, đồng thời khóa `data.csv` và đối chiếu lại content hash để phát hiện thay đổi ngay cả khi size/timestamp không đổi.
 
-Process giữ các PNG puzzle/answer trong `.workspace/cache/topics/{index}`, xuất Answer thành JPEG quality 85 tại `output/answer/{index:000}.jpg`, rồi tạo `output/{book}.interior.pdf`. PDF có thứ tự Front theo natural filename, toàn bộ puzzle page theo topic, rồi Back theo natural filename; Answer không nằm trong PDF. Raster `2588x3375` được nhúng nguyên vẹn vào trang `2588/300 × 3375/300 inch`, không resize/downsample. PDF, Answer và output manifest được kiểm tra trước khi atomic publish; lượt chạy lỗi hoặc bị hủy không thay output thành công trước đó.
+Process giữ các PNG puzzle/answer trong `.workspace/cache/topics/{index}`, xuất Answer thành JPEG quality 85 tại `output/answer/{index:000}.jpg`, rồi tạo `output/{book}.interior.pdf`. PDF có thứ tự Front theo natural filename, toàn bộ puzzle page theo topic, Back theo natural filename, và cuối cùng là QR page nếu được bật; Answer không nằm trong PDF. Raster `2588x3375` được nhúng nguyên vẹn vào trang `2588/300 × 3375/300 inch`, không resize/downsample. PDF, Answer và output manifest được kiểm tra trước khi atomic publish; lượt chạy lỗi hoặc bị hủy không thay output thành công trước đó.
 
 ```text
 brands/{brand}/
 ├─ settings.json
 ├─ page_layout.png
 ├─ front_layout.png
+├─ page_qr.png (optional)
 ├─ front/
 └─ back/
 ```
 
-Mỗi brand lưu một certificate chung tại `brands/{brand}/brand.validation.json`. `page_layout.png` và `front_layout.png` luôn bắt buộc; `front/back` là các trang PDF optional và folder thiếu hoặc rỗng được bỏ qua. Khi có ảnh trực tiếp trong hai folder, chỉ `.png`, `.jpg`, `.jpeg` được theo dõi và từng ảnh phải đọc được ở đúng `2588x3375`; file khác và thư mục con không tham gia validation hay fingerprint. Brand cũ phải tự bổ sung `front_layout.png` rồi Validate brand; ứng dụng không tự sửa asset hiện có.
+Mỗi brand lưu một certificate chung tại `brands/{brand}/brand.validation.json`. `page_layout.png` và `front_layout.png` luôn bắt buộc; `front/back` là các trang PDF optional và folder thiếu hoặc rỗng được bỏ qua. Khi có ảnh trực tiếp trong hai folder, chỉ `.png`, `.jpg`, `.jpeg` được theo dõi và từng ảnh phải đọc được ở đúng `2588x3375`; file khác và thư mục con không tham gia validation hay fingerprint. `page_qr.png` cũng optional, nhưng khi có thì bắt buộc là PNG `2588x3375`, tham gia fingerprint/validation và Brand Settings phải có `qrPage` gồm `x`, `y`, `size`, `domainName`. `size` là một cạnh hình vuông; rectangle `x/y/size` phải nằm trọn trong trang. Brand cũ phải tự bổ sung `front_layout.png` rồi Validate brand; ứng dụng không tự sửa asset hiện có.
+
+Khi `page_qr.png` tồn tại, Process tạo QR error-correction Q theo URL `https://wordsearch.{domainName}/{book-folder}`; tên folder được percent-encode thành đúng một URL path segment. QR dùng số pixel nguyên cho mỗi module, giữ quiet zone, được căn giữa trong hình vuông cấu hình và ghi đè atomically tại `.workspace/cache/page-qr.png`. Cache cũ được xóa khi template bị gỡ. QR preview không nằm trong **Draw demo** và không có file output riêng ngoài trang cuối của interior PDF.
 
 Workspace startup chỉ liệt kê file, đọc metadata và so certificate; không decode ảnh. Kiểm tra format/dimensions chỉ chạy qua nút **Validate brand** trong background queue. Thêm, xóa, đổi tên hoặc thay đổi asset được theo dõi sẽ chuyển Brand sang `Needs validation`, và Generation bị chặn ở cả UI lẫn Core cho đến khi toàn Brand là `Validated`.
 
 Brand Detail cung cấp **Draw demo** để render một trang puzzle mẫu với cả hai layout và settings đã lưu vào `brands/{brand}/page_layout.preview.png`. Preview chạy trong background queue, không sửa layout nguồn hay certificate validation; **Open folder** mở trực tiếp thư mục brand để xem file kết quả ở kích thước đầy đủ.
 
-Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Brand cũ thiếu Quote được nạp default trong memory và hiển thị **Settings update required**; Validate brand, Draw demo và Process bị khóa cho tới khi người dùng bấm Save Brand. Lần Save tiếp theo ghi schema canonical gồm Quote rectangle/font, text anchor/alignment và bốn keyword column anchors.
+Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Brand cũ thiếu Quote được nạp default trong memory và hiển thị **Settings update required**. Nếu thêm `page_qr.png` vào Brand chưa có `qrPage`, UI cũng yêu cầu lưu X/Y/Size/Domain Name. Validate brand, Draw demo và Process bị khóa cho tới khi người dùng bấm Save Brand. Lần Save tiếp theo ghi schema canonical gồm Quote rectangle/font, text anchor/alignment, bốn keyword column anchors và QR settings khi tính năng đang hoạt động.
 
 Quy ước kích thước và bố cục Desktop được ghi tại [Desktop UI guidelines](docs/ui-guidelines.md). UI dùng baseline `1600x900`; `MainWindow` có kích thước khởi tạo và tối thiểu `1610x910` để chừa khoảng trống quanh nội dung.
 

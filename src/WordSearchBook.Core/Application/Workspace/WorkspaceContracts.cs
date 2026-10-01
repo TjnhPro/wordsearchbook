@@ -22,6 +22,7 @@ public sealed record WorkspaceBookOutput(
     int PuzzlePageCount = 0,
     int FrontPageCount = 0,
     int BackPageCount = 0,
+    int QrPageCount = 0,
     int PdfPageCount = 0,
     int AnswerCount = 0,
     long AnswerLengthBytes = 0,
@@ -40,13 +41,22 @@ public sealed record WorkspaceBrandAssetFolder(
     bool Exists,
     IReadOnlyList<WorkspaceBrandAssetFile> Files);
 
+public sealed record WorkspaceBrandOptionalFile(
+    string Key,
+    string RelativePath,
+    bool Exists,
+    string Extension,
+    BrandValidationStatus Status);
+
 public sealed record WorkspaceBrand(
     string Id,
     BrandWordSearchSettings? Settings,
     BrandValidationState Validation,
     WorkspaceIssue? Issue,
     IReadOnlyList<WorkspaceBrandAssetFolder> AssetFolders,
-    bool SettingsRequireSave = false);
+    bool SettingsRequireSave = false,
+    string? SettingsUpdateReasonCode = null,
+    WorkspaceBrandOptionalFile? QrPage = null);
 
 public sealed record WorkspaceBook(
     string Id,

@@ -105,6 +105,90 @@ public sealed class JsonWordSearchSettingsReaderTests
         Assert.Contains("quote.rectangle", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task LoadsAndNormalizesOptionalQrPageSettings()
+    {
+        var root = await CreateTemporarySettingsAsync(brandTransform: json =>
+        {
+            var document = JsonNode.Parse(json)!.AsObject();
+            document["qrPage"] = JsonNode.Parse("""{"x":994,"y":2400,"size":600,"domainName":"  EXAMPLE.COM  "}""");
+            return document.ToJsonString();
+        });
+
+        try
+        {
+            var settings = await new JsonWordSearchSettingsReader().ReadAsync(root, "demo");
+
+            Assert.Equal(new QrPageSettings(994, 2400, 600, "example.com"), settings.Brand.QrPage);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExistingQrTemplateRequiresQrSettingsBeforeStrictRead()
+    {
+        var root = await CreateTemporarySettingsAsync();
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "brands", "demo", "page_qr.png"), "metadata only");
+            var reader = new JsonWordSearchSettingsReader();
+            var global = await reader.ReadGlobalAsync(root);
+
+            var brand = await reader.ReadBrandAsync(root, "demo", global);
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() => reader.ReadAsync(root, "demo"));
+
+            Assert.True(brand.RequiresSave);
+            Assert.Equal("qr_settings_required", brand.UpdateReasonCode);
+            Assert.Null(brand.Settings.QrPage);
+            Assert.Equal("qr_settings_required", exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("https://example.com")]
+    [InlineData("example.com/path")]
+    [InlineData("localhost")]
+    [InlineData("-bad.example.com")]
+    [InlineData("example.com:443")]
+    public void RejectsInvalidQrDomain(string domainName)
+    {
+        var settings = WordSearchSettingsDefaults.CreateBrand() with
+        {
+            QrPage = new QrPageSettings(100, 100, 600, domainName)
+        };
+
+        var exception = Assert.Throws<WordSearchGenerationException>(() =>
+            JsonWordSearchSettingsReader.ValidateBrand(WordSearchSettingsDefaults.CreateGlobal(), settings));
+
+        Assert.Equal("qr_domain_invalid", exception.Code);
+    }
+
+    [Theory]
+    [InlineData(-1, 0, 100)]
+    [InlineData(0, -1, 100)]
+    [InlineData(0, 0, 0)]
+    [InlineData(2500, 0, 100)]
+    [InlineData(0, 3300, 100)]
+    public void RejectsQrSquareOutsidePage(int x, int y, int size)
+    {
+        var settings = WordSearchSettingsDefaults.CreateBrand() with
+        {
+            QrPage = new QrPageSettings(x, y, size, "example.com")
+        };
+
+        var exception = Assert.Throws<WordSearchGenerationException>(() =>
+            JsonWordSearchSettingsReader.ValidateBrand(WordSearchSettingsDefaults.CreateGlobal(), settings));
+
+        Assert.Equal("qr_settings_invalid", exception.Code);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(13)]

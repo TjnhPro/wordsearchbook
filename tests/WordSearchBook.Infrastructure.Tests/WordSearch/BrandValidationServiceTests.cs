@@ -2,6 +2,8 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.WordSearch.Validation;
+using WordSearchBook.Infrastructure.WordSearch.Settings;
+using WordSearchBook.Core.WordSearch.Domain;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 
@@ -157,6 +159,87 @@ public sealed class BrandValidationServiceTests
             Assert.Equal(
                 ["page_layout.png", "front_layout.png", "front/opening.png", "back/closing.jpg"],
                 result.State.ValidatedAssets!.Select(asset => asset.RelativePath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ValidatesOptionalQrPageWhenConfigured()
+    {
+        var root = await CreateConfiguredBrandRootAsync();
+        try
+        {
+            SaveImage(QrPagePath(root), 2588, 3375, ImageFormat.Png);
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            Assert.True(result.IsSuccess);
+            Assert.Contains(result.State.ValidatedAssets!, asset => asset.RelativePath == "page_qr.png");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task QrPageRequiresSettings()
+    {
+        var root = await CreateConfiguredBrandRootAsync(includeQrSettings: false);
+        try
+        {
+            SaveImage(QrPagePath(root), 2588, 3375, ImageFormat.Png);
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            Assert.Contains(result.Failures, failure => failure.Code == "qr_settings_required");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("corrupt", "qr_page_invalid")]
+    [InlineData("wrong-size", "qr_page_dimensions_invalid")]
+    [InlineData("wrong-format", "qr_page_format_invalid")]
+    public async Task InvalidQrPageReturnsStableFailure(string scenario, string expectedCode)
+    {
+        var root = await CreateConfiguredBrandRootAsync();
+        try
+        {
+            if (scenario == "corrupt") await File.WriteAllTextAsync(QrPagePath(root), "broken");
+            if (scenario == "wrong-size") SaveImage(QrPagePath(root), 100, 100, ImageFormat.Png);
+            if (scenario == "wrong-format") SaveImage(QrPagePath(root), 2588, 3375, ImageFormat.Jpeg);
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            Assert.Contains(result.Failures, failure => failure.Code == expectedCode && failure.Target == "page_qr.png");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AddingQrPageInvalidatesExistingCertificateWithoutDecoding()
+    {
+        var root = CreateRoot();
+        try
+        {
+            await File.WriteAllTextAsync(LayoutPath(root), "layout metadata");
+            await SaveCurrentRecordAsync(root);
+            await File.WriteAllTextAsync(QrPagePath(root), "not decoded during state check");
+
+            var state = await CreateService().CheckStateAsync(root, "demo");
+
+            Assert.Equal(BrandValidationStatus.NeedsValidation, state.Status);
+            Assert.Equal("brand_fingerprint_changed", state.ReasonCode);
         }
         finally
         {
@@ -379,7 +462,8 @@ public sealed class BrandValidationServiceTests
         }
     }
 
-    private static BrandValidationService CreateService() => new(new JsonBrandValidationStateStore());
+    private static BrandValidationService CreateService() =>
+        new(new JsonBrandValidationStateStore(), new WordSearchBook.Infrastructure.WordSearch.Settings.JsonWordSearchSettingsReader());
 
     private static async Task SaveCurrentRecordAsync(string root)
     {
@@ -424,4 +508,28 @@ public sealed class BrandValidationServiceTests
     private static string LayoutPath(string root) => Path.Combine(root, "brands", "demo", "page_layout.png");
 
     private static string FrontLayoutPath(string root) => Path.Combine(root, "brands", "demo", "front_layout.png");
+
+    private static string QrPagePath(string root) => Path.Combine(root, "brands", "demo", "page_qr.png");
+
+    private static async Task<string> CreateConfiguredBrandRootAsync(bool includeQrSettings = true)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"wordsearchbook-qr-validation-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var reader = new JsonWordSearchSettingsReader();
+        await reader.ReadGlobalAsync(root);
+        var writer = new JsonWordSearchSettingsWriter(reader);
+        await writer.CreateBrandAsync(root, "demo");
+        if (includeQrSettings)
+        {
+            await writer.SaveBrandAsync(
+                root,
+                "demo",
+                WordSearchSettingsDefaults.CreateBrand() with
+                {
+                    QrPage = new QrPageSettings(994, 2400, 600, "example.com")
+                });
+        }
+
+        return root;
+    }
 }
