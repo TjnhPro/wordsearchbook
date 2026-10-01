@@ -47,3 +47,7 @@ jobs:
 
       - name: Test
         run: dotnet test WordSearchBook.sln --configuration Release --no-build
+
+      - name: Verify single-file package
+        shell: pwsh
+        run: ./scripts/publish-release.ps1 -ExpectedVersion 0.1.0 -SkipVerification

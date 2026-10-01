@@ -1,0 +1,71 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: src/WordSearchBook.Desktop/Frontend/package-lock.json
+
+      - name: Validate release tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "Release tag '$tag' must match vM.m.p."
+          }
+
+          git fetch origin main:refs/remotes/origin/main --no-tags
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release commit '$env:GITHUB_SHA' is not contained in main."
+          }
+
+          $version = $tag.Substring(1)
+          $projectVersion = (& dotnet msbuild src/WordSearchBook.Desktop/WordSearchBook.Desktop.csproj -nologo -getProperty:Version).Trim()
+          if ($projectVersion -ne $version) {
+            throw "Release tag '$tag' does not match project version '$projectVersion'."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build and verify single-file release
+        shell: pwsh
+        run: ./scripts/publish-release.ps1 -ExpectedVersion "${{ steps.version.outputs.version }}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Word Search Book v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Portable Windows x64 release. Download `WordSearchBook.exe` into a writable folder and run it directly.
+
+            Microsoft Edge WebView2 Runtime is required. This unsigned MVP may show a Windows SmartScreen warning.
+          files: |
+            artifacts/release/WordSearchBook.exe
+            artifacts/release/WordSearchBook.exe.sha256
