@@ -159,36 +159,11 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
                 font,
                 settings.Global.Page,
                 $"{EntryContext(topic, entry)} is outside the printable page. Adjust the keyword columns or font in Brand Settings.");
-            measured.Add(new MeasuredKeyword(entry, columnIndex, bounds));
+            measured.Add(new MeasuredKeyword(entry, columnIndex, rowIndex, bounds));
         }
 
-        foreach (var item in measured)
-        {
-            if (item.Bounds.Height > keywordSettings.StepY)
-            {
-                throw new WordSearchGenerationException(
-                    "keyword_slot_height_overflow",
-                    $"{EntryContext(topic, item.Entry)} is too tall for its row. Reduce the keyword font size or increase the keyword row spacing in Brand Settings.");
-            }
-        }
-
-        for (var index = 0; index < measured.Count; index++)
-        {
-            var current = measured[index];
-            var collision = measured.Skip(index + 1)
-                .FirstOrDefault(candidate => candidate.Bounds.IntersectsWith(current.Bounds));
-            if (collision is not null)
-            {
-                throw new WordSearchGenerationException(
-                    "keyword_collision",
-                    $"{EntryContext(topic, current.Entry)} overlaps Keyword '{collision.Entry.Keyword}' from CSV row {collision.Entry.SourceRow}. Adjust the keyword columns or row spacing in Brand Settings.");
-            }
-        }
-
-        foreach (var item in measured)
-        {
-            EnsureWithinKeywordColumn(item, topic, keywordSettings, settings.Global.Page);
-        }
+        EnsureKeywordColumnsDoNotTouch(measured, topic, keywordSettings);
+        EnsureKeywordRowsDoNotTouch(measured, topic);
 
         foreach (var item in measured)
         {
@@ -196,29 +171,54 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         }
     }
 
-    private static void EnsureWithinKeywordColumn(
-        MeasuredKeyword keyword,
+    private static void EnsureKeywordColumnsDoNotTouch(
+        IReadOnlyCollection<MeasuredKeyword> measured,
         WordSearchTopic topic,
-        KeywordListSettings settings,
-        PageSize pageSize)
+        KeywordListSettings settings)
     {
-        var ordered = settings.Columns
+        var orderedColumns = settings.Columns
             .Select((column, index) => (column.X, Index: index))
             .OrderBy(column => column.X)
             .ToArray();
-        var orderedIndex = Array.FindIndex(ordered, column => column.Index == keyword.ColumnIndex);
-        var left = orderedIndex == 0
-            ? 0f
-            : (ordered[orderedIndex - 1].X + ordered[orderedIndex].X) / 2f;
-        var right = orderedIndex == ordered.Length - 1
-            ? pageSize.Width
-            : (ordered[orderedIndex].X + ordered[orderedIndex + 1].X) / 2f;
 
-        if (keyword.Bounds.Left < left || keyword.Bounds.Right > right)
+        for (var index = 0; index < orderedColumns.Length - 1; index++)
         {
-            throw new WordSearchGenerationException(
-                "keyword_slot_width_overflow",
-                $"{EntryContext(topic, keyword.Entry)} is too wide for keyword column {keyword.ColumnIndex + 1}. Shorten the Keyword, reduce the keyword font size, or increase the space between columns in Brand Settings.");
+            var leftColumn = orderedColumns[index];
+            var rightColumn = orderedColumns[index + 1];
+            var rightMostLeftKeyword = measured
+                .Where(keyword => keyword.ColumnIndex == leftColumn.Index)
+                .MaxBy(keyword => keyword.Bounds.Right)!;
+            var leftMostRightKeyword = measured
+                .Where(keyword => keyword.ColumnIndex == rightColumn.Index)
+                .MinBy(keyword => keyword.Bounds.Left)!;
+
+            if (rightMostLeftKeyword.Bounds.Right >= leftMostRightKeyword.Bounds.Left)
+            {
+                throw new WordSearchGenerationException(
+                    "keyword_slot_width_overflow",
+                    $"{EntryContext(topic, rightMostLeftKeyword.Entry)} touches or overlaps Keyword '{leftMostRightKeyword.Entry.Keyword}' from CSV row {leftMostRightKeyword.Entry.SourceRow} between keyword columns {leftColumn.Index + 1} and {rightColumn.Index + 1}. Shorten either Keyword, reduce the keyword font size, or increase the space between columns in Brand Settings.");
+            }
+        }
+    }
+
+    private static void EnsureKeywordRowsDoNotTouch(
+        IReadOnlyCollection<MeasuredKeyword> measured,
+        WordSearchTopic topic)
+    {
+        foreach (var column in measured.GroupBy(keyword => keyword.ColumnIndex))
+        {
+            var orderedRows = column.OrderBy(keyword => keyword.RowIndex).ToArray();
+            for (var index = 0; index < orderedRows.Length - 1; index++)
+            {
+                var upperKeyword = orderedRows[index];
+                var lowerKeyword = orderedRows[index + 1];
+                if (upperKeyword.Bounds.Bottom >= lowerKeyword.Bounds.Top)
+                {
+                    throw new WordSearchGenerationException(
+                        "keyword_slot_height_overflow",
+                        $"{EntryContext(topic, upperKeyword.Entry)} touches or overlaps Keyword '{lowerKeyword.Entry.Keyword}' from CSV row {lowerKeyword.Entry.SourceRow} in keyword column {upperKeyword.ColumnIndex + 1}. Increase the keyword row spacing or reduce the keyword font size in Brand Settings.");
+                }
+            }
         }
     }
 
@@ -309,5 +309,6 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
     private sealed record MeasuredKeyword(
         WordSearchEntry Entry,
         int ColumnIndex,
+        int RowIndex,
         RectangleF Bounds);
 }
