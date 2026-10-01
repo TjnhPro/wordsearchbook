@@ -42,9 +42,10 @@ public sealed class WordSearchBookGenerationServiceTests
 
             using (var manifest = JsonDocument.Parse(await File.ReadAllBytesAsync(result.ManifestPath)))
             {
-                Assert.Equal(1, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
+                Assert.Equal(2, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
                 Assert.Equal("sample-book", manifest.RootElement.GetProperty("bookId").GetString());
                 Assert.Equal("AMAZING ANIMALS", manifest.RootElement.GetProperty("topics")[0].GetProperty("name").GetString());
+                Assert.Equal("Every puzzle is a new little adventure.", manifest.RootElement.GetProperty("topics")[0].GetProperty("quote").GetString());
                 Assert.Equal("RED PANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("keyword").GetString());
                 Assert.Equal("REDPANDA", manifest.RootElement.GetProperty("topics")[0].GetProperty("entries")[0].GetProperty("wordSearchKey").GetString());
                 Assert.Equal(20, manifest.RootElement.GetProperty("topics")[0].GetProperty("entries").GetArrayLength());
@@ -96,7 +97,7 @@ public sealed class WordSearchBookGenerationServiceTests
 
             await File.WriteAllLinesAsync(
                 Path.Combine(root, "input", "sample-book", "data.csv"),
-                ["Topic,Keyword,Word Search Key", "Broken,Only One,ONLYONE"]);
+                ["Topic,Quote,Keyword,Word Search Key", "Broken,Keep going,Only One,ONLYONE"]);
 
             var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() => service.GenerateAsync(request));
 

@@ -12,11 +12,11 @@ namespace WordSearchBook.Infrastructure.WordSearch.Validation;
 public sealed class CsvBookDataValidationService(IBookDataValidationStateStore stateStore)
     : IBookDataValidationService
 {
-    internal const int SchemaVersion = 2;
+    internal const int SchemaVersion = 3;
     internal const int FingerprintFormatVersion = 1;
     internal const int RequiredEntriesPerTopic = 20;
     internal const int MaximumWordSearchKeyLength = 20;
-    private static readonly string[] RequiredHeaders = ["TOPIC", "KEYWORD", "WORD SEARCH KEY"];
+    private static readonly string[] RequiredHeaders = ["TOPIC", "QUOTE", "KEYWORD", "WORD SEARCH KEY"];
 
     public async ValueTask<BookDataValidationState> CheckStateAsync(
         string rootPath,
@@ -199,6 +199,7 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
                 cancellationToken.ThrowIfCancellationRequested();
                 var sourceRow = csv.Context.Parser?.Row ?? 0;
                 var topic = csv.GetField("Topic")?.Trim();
+                var quote = QuoteText.Normalize(csv.GetField("Quote"));
                 var keyword = csv.GetField("Keyword")?.Trim();
                 var rawKey = csv.GetField("Word Search Key") ?? string.Empty;
                 var normalizedTopic = string.IsNullOrWhiteSpace(topic) ? null : topic.ToUpperInvariant();
@@ -221,6 +222,30 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
                     }
 
                     builder.RowCount++;
+                }
+
+                if (quote.Length == 0)
+                {
+                    AddTopicFailure(
+                        failures,
+                        builder,
+                        "quote_invalid",
+                        "Quote cannot be empty.",
+                        sourceRow);
+                }
+                else if (builder is not null && builder.Quote is null)
+                {
+                    builder.Quote = quote;
+                    builder.QuoteSourceRow = sourceRow;
+                }
+                else if (builder is not null && !string.Equals(builder.Quote, quote, StringComparison.Ordinal))
+                {
+                    AddTopicFailure(
+                        failures,
+                        builder,
+                        "quote_mismatch",
+                        $"Quote '{quote}' does not match Quote '{builder.Quote}' from CSV row {builder.QuoteSourceRow}. Use the same Quote for all rows in a Topic.",
+                        sourceRow);
                 }
 
                 if (string.IsNullOrWhiteSpace(keyword))
@@ -369,6 +394,10 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
         public int RowCount { get; set; }
 
         public bool HasFailure { get; set; }
+
+        public string? Quote { get; set; }
+
+        public int QuoteSourceRow { get; set; }
 
         public HashSet<string> WordSearchKeys { get; } = new(StringComparer.Ordinal);
     }

@@ -1,6 +1,7 @@
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
+using System.Text.Json.Nodes;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 
@@ -45,12 +46,63 @@ public sealed class JsonWordSearchSettingsReaderTests
         Assert.Equal(20, settings.Global.Board.Width);
         Assert.Equal(3375, settings.Global.Page.Height);
         Assert.Equal(13, settings.Global.MaximumKeywordLength);
+        Assert.Equal(new LayoutRectangle(300, 3000, 1988, 220), settings.Brand.Quote.Rectangle);
         Assert.Equal(2000, settings.Brand.BoardGame.Rectangle.Width);
         Assert.Equal(TextAlignment.Center, settings.Brand.Topic.Alignment);
         Assert.Equal(4, settings.Brand.KeywordList.Columns.Count);
         Assert.Equal(80, settings.Brand.KeywordList.StepY);
         Assert.Equal("Arial", settings.Brand.BoardGame.Font.Name);
         Assert.Equal("#8B1E1E", settings.Brand.AnswerLine.Color);
+    }
+
+    [Fact]
+    public async Task LoadsDefaultQuoteForLegacyBrandButBlocksStrictReadUntilSaved()
+    {
+        var root = await CreateTemporarySettingsAsync(brandTransform: json =>
+        {
+            var document = JsonNode.Parse(json)!.AsObject();
+            document.Remove("quote");
+            return document.ToJsonString();
+        });
+
+        try
+        {
+            var reader = new JsonWordSearchSettingsReader();
+            var global = await reader.ReadGlobalAsync(root);
+
+            var legacy = await reader.ReadBrandAsync(root, "demo", global);
+
+            Assert.True(legacy.RequiresSave);
+            Assert.Equal(new LayoutRectangle(300, 3000, 1988, 220), legacy.Settings.Quote.Rectangle);
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() => reader.ReadAsync(root, "demo"));
+            Assert.Equal("brand_settings_update_required", exception.Code);
+
+            await new JsonWordSearchSettingsWriter(reader).SaveBrandAsync(root, "demo", legacy.Settings);
+            var upgraded = await reader.ReadAsync(root, "demo");
+            Assert.Equal(legacy.Settings.Quote, upgraded.Brand.Quote);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RejectsQuoteRectangleOutsidePage()
+    {
+        var settings = WordSearchSettingsDefaults.CreateBrand() with
+        {
+            Quote = WordSearchSettingsDefaults.CreateBrand().Quote with
+            {
+                Rectangle = new LayoutRectangle(2500, 3000, 1988, 220)
+            }
+        };
+
+        var exception = Assert.Throws<WordSearchGenerationException>(() =>
+            JsonWordSearchSettingsReader.ValidateBrand(WordSearchSettingsDefaults.CreateGlobal(), settings));
+
+        Assert.Equal("settings_invalid", exception.Code);
+        Assert.Contains("quote.rectangle", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

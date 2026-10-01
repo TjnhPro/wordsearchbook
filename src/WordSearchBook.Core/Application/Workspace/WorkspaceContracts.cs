@@ -45,7 +45,8 @@ public sealed record WorkspaceBrand(
     BrandWordSearchSettings? Settings,
     BrandValidationState Validation,
     WorkspaceIssue? Issue,
-    IReadOnlyList<WorkspaceBrandAssetFolder> AssetFolders);
+    IReadOnlyList<WorkspaceBrandAssetFolder> AssetFolders,
+    bool SettingsRequireSave = false);
 
 public sealed record WorkspaceBook(
     string Id,

@@ -57,6 +57,7 @@ public static class WordSearchSettingsDefaults
 
     public static BrandWordSearchSettings CreateBrand() => new(
         new AnchoredTextSettings(1200, 100, new FontSettings("Arial", 36, "#1A1A1A"), TextAlignment.Center),
+        new TextRegionSettings(new LayoutRectangle(300, 3000, 1988, 220), new FontSettings("Arial", 20, "#1A1A1A")),
         new TextRegionSettings(new LayoutRectangle(200, 400, 2000, 2000), new FontSettings("Arial", 18, "#000000")),
         new KeywordListSettings(
             [
@@ -74,6 +75,7 @@ public static class WordSearchSettingsDefaults
 
 public sealed record BrandWordSearchSettings(
     AnchoredTextSettings Topic,
+    TextRegionSettings Quote,
     TextRegionSettings BoardGame,
     KeywordListSettings KeywordList,
     AnchoredTextSettings PageNumber,

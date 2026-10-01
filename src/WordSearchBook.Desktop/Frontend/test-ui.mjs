@@ -136,6 +136,7 @@ test("builds a complete typed brand settings payload", () => {
     addFont(name, font);
   };
   addAnchor("topic", 1, "Arial", "Center");
+  addRegion("quote", 21, "Georgia");
   addRegion("boardGame", 11, "Calibri");
   [1, 2, 3, 4].forEach(index => {
     values.set(`keywordList.column${index}X`, String(index * 100));
@@ -156,6 +157,10 @@ test("builds a complete typed brand settings payload", () => {
     alignment: "Center"
   });
   assert.deepEqual(settings.boardGame.rectangle, { x: 11, y: 12, width: 13, height: 14 });
+  assert.deepEqual(settings.quote, {
+    rectangle: { x: 21, y: 22, width: 23, height: 24 },
+    font: { name: "Georgia", size: 24.5, color: "#112233" }
+  });
   assert.deepEqual(settings.keywordList.columns, [
     { x: 100, y: 2100 }, { x: 200, y: 2100 }, { x: 300, y: 2100 }, { x: 400, y: 2100 }
   ]);
@@ -269,6 +274,7 @@ test("maps all brand validation states to stable UI badges", () => {
 
 test("allows generation only for a certified brand", () => {
   assert.equal(canGenerateWithBrand({ validation: { status: "Validated" } }), true);
+  assert.equal(canGenerateWithBrand({ validation: { status: "Validated" }, settingsRequireSave: true }), false);
   assert.equal(canGenerateWithBrand({ validation: { status: "NeedsValidation" } }), false);
   assert.equal(canGenerateWithBrand({ validation: { status: "NotValidated" } }), false);
   assert.equal(canGenerateWithBrand(null), false);

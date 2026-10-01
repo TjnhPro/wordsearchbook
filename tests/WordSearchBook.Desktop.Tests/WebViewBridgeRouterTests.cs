@@ -331,6 +331,7 @@ public sealed class WebViewBridgeRouterTests
     {
         var router = CreateRouter(out var manager);
         const string boardRegion = """{"rectangle":{"x":10,"y":20,"width":2000,"height":2000},"font":{"name":"Arial","size":24,"color":"#112233"}}""";
+        const string quoteRegion = """{"rectangle":{"x":300,"y":3000,"width":1988,"height":220},"font":{"name":"Arial","size":20,"color":"#1A1A1A"}}""";
         const string textRegion = """{"x":10,"y":20,"font":{"name":"Arial","size":24,"color":"#112233"},"alignment":"Center"}""";
         const string keywordRegion = """{"columns":[{"x":100,"y":2100},{"x":600,"y":2100},{"x":1100,"y":2100},{"x":1600,"y":2100}],"stepY":60,"font":{"name":"Arial","size":24,"color":"#112233"},"alignment":"Center"}""";
         var message = $$"""
@@ -341,6 +342,7 @@ public sealed class WebViewBridgeRouterTests
                 "brandId": "demo",
                 "settings": {
                   "topic": {{textRegion}},
+                  "quote": {{quoteRegion}},
                   "boardGame": {{boardRegion}},
                   "keywordList": {{keywordRegion}},
                   "pageNumber": {{textRegion}},
@@ -357,6 +359,7 @@ public sealed class WebViewBridgeRouterTests
         var request = Assert.IsType<BrandSettingsSaveTaskRequest>(manager.LastRequest);
         Assert.Equal("demo", request.BrandId);
         Assert.Equal(10, request.Settings.Topic.X);
+        Assert.Equal(1988, request.Settings.Quote.Rectangle.Width);
         Assert.Equal("Arial", request.Settings.BoardGame.Font.Name);
         Assert.Equal(2.5f, request.Settings.AnswerLine.Width);
         Assert.Equal("#AABBCC", request.Settings.AnswerLine.Color);

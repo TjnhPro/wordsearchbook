@@ -138,6 +138,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
 
         DrawKeywords(graphics, topic, settings);
 
+        DrawQuote(graphics, topic, settings.Brand.Quote);
+
         using var pageFont = SystemDrawingRenderSupport.CreateFont(settings.Brand.PageNumber.Font);
         using var pageBrush = new SolidBrush(SystemDrawingRenderSupport.ParseColor(settings.Brand.PageNumber.Font.Color));
         DrawAnchoredText(
@@ -150,6 +152,36 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
             pageBrush,
             settings.Global.Page,
             $"Page number '{pageNumber}' is outside the printable page. Adjust the Page number position in Brand Settings.");
+    }
+
+    private static void DrawQuote(
+        Graphics graphics,
+        WordSearchTopic topic,
+        TextRegionSettings settings)
+    {
+        using var font = SystemDrawingRenderSupport.CreateFont(settings.Font);
+        using var brush = new SolidBrush(SystemDrawingRenderSupport.ParseColor(settings.Font.Color));
+        var rectangle = settings.Rectangle;
+        var lineHeight = font.GetHeight(graphics);
+        var sourceRow = topic.Entries.Count > 0 ? topic.Entries[0].SourceRow : 0;
+        var overflowMessage =
+            $"CSV row {sourceRow}, topic '{topic.Name}': Quote '{topic.Quote}' does not fit inside the Quote area in at most two lines. Increase Quote Width or Height, reduce the Quote font size, or shorten the Quote.";
+        var lines = QuoteLineLayout.Split(
+            topic.Quote,
+            rectangle.Width,
+            rectangle.Height,
+            lineHeight,
+            value => graphics.MeasureString(value, font).Width,
+            overflowMessage);
+        var top = rectangle.Y + ((rectangle.Height - (lineHeight * lines.Count)) / 2f);
+
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var line = lines[index];
+            var lineWidth = graphics.MeasureString(line, font).Width;
+            var left = rectangle.X + ((rectangle.Width - lineWidth) / 2f);
+            graphics.DrawString(line, font, brush, left, top + (index * lineHeight));
+        }
     }
 
     private static void DrawTopic(

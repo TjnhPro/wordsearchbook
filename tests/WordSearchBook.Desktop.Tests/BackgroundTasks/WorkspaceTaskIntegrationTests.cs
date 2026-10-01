@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
+using System.Text.Json.Nodes;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Desktop.BackgroundTasks;
@@ -122,6 +123,40 @@ public sealed class WorkspaceTaskIntegrationTests
                 out var result));
             Assert.Equal("page_layout.preview.png", result!.FileName);
             Assert.True(File.Exists(Path.Combine(root, "brands", "demo", result.FileName)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LegacyBrandMustSaveQuoteSettingsBeforeValidation()
+    {
+        var root = await CopyFixtureToTemporaryRootAsync();
+        try
+        {
+            var settingsPath = Path.Combine(root, "brands", "demo", "settings.json");
+            var document = JsonNode.Parse(await File.ReadAllTextAsync(settingsPath))!.AsObject();
+            document.Remove("quote");
+            await File.WriteAllTextAsync(settingsPath, document.ToJsonString());
+            var services = new ServiceCollection();
+            services.AddWordSearchBookInfrastructure();
+            services.AddSingleton<IBookBrandAssignmentStore>(new EmptyAssignmentStore());
+            using var provider = services.BuildServiceProvider();
+            using var manager = new BackgroundTaskManager(provider);
+
+            var task = await manager.StartAsync(
+                BackgroundTaskKind.BrandValidation,
+                "brand-layout:demo",
+                "demo",
+                new BrandValidationRequest(root, "demo"));
+
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(10)));
+            var completed = await manager.GetAsync(task.TaskId);
+            Assert.Equal(BackgroundTaskState.Failed, completed!.State);
+            Assert.Equal("brand_settings_update_required", completed.ErrorCode);
+            Assert.False(File.Exists(Path.Combine(root, "brands", "demo", "brand.validation.json")));
         }
         finally
         {

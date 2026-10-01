@@ -43,7 +43,7 @@ public sealed class BoundedWordSearchTopicBatchProcessorTests
         Assert.Equal(0, processor.StartedCount);
     }
 
-    private static WordSearchTopic Topic(int index) => new(index, $"TOPIC {index}", []);
+    private static WordSearchTopic Topic(int index) => new(index, $"TOPIC {index}", "A sample quote.", []);
 
     private sealed class ControllableTopicProcessor(int expectedConcurrency) : IWordSearchTopicProcessor
     {

@@ -81,14 +81,14 @@ Frontend gửi message `ping` khi khởi động. Desktop trả `pong` với tê
 
 ## Word Search Core MVP
 
-Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv`, group theo Topic và yêu cầu mỗi Topic có đúng 20 cặp Keyword/Word Search Key. Giới hạn Keyword hiển thị nằm ở `maximumKeywordLength` trong Global Settings (mặc định 13 ký tự, không tính khoảng trắng). Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
+Backend đọc dữ liệu từ `input/{book-name-or-sku}/data.csv` với schema bắt buộc `Topic,Quote,Keyword,Word Search Key`, group theo Topic và yêu cầu mỗi Topic có đúng 20 dòng. Cả 20 dòng phải lặp cùng một Quote sau khi trim/gộp khoảng trắng. Giới hạn Keyword hiển thị nằm ở `maximumKeywordLength` trong Global Settings (mặc định 13 ký tự, không tính khoảng trắng). Global settings nằm tại `settings.json`; brand layout nằm tại `brands/{brand}/settings.json`.
 
-`IWordSearchBookGenerationService` sinh board puzzle/answer từ base `brands/{brand}/page_layout.png`. Với trang puzzle, `front_layout.png` được alpha-compose sau board, Topic, Keyword và page number; trang Answer không dùng foreground. Cả hai layout đều bắt buộc là PNG `2588x3375`; ảnh được vẽ pixel-to-pixel, không resize/downsample.
+`IWordSearchBookGenerationService` sinh board puzzle/answer từ base `brands/{brand}/page_layout.png`. Với trang puzzle, `front_layout.png` được alpha-compose sau board, Topic, Quote, Keyword và page number; trang Answer vẫn vẽ Quote nhưng không dùng foreground. Cả hai layout đều bắt buộc là PNG `2588x3375`; ảnh được vẽ pixel-to-pixel, không resize/downsample.
 
-Topic, Keyword và Word Search Key được chuẩn hóa thành chữ hoa khi đọc CSV. Topic dùng anchor X/Y; page number dùng số thứ tự Topic bắt đầu từ 1; keyword list dùng đúng 20 Keyword hiển thị theo column-major, 5 từ cho mỗi cột trong 4 cột. Mỗi text region hỗ trợ `Left`, `Center`, `Right`; X là anchor theo alignment và Y luôn là cạnh trên. Text vượt trang hoặc chạm keyword khác sẽ fail bằng `page_text_overflow`.
+Topic, Keyword và Word Search Key được chuẩn hóa thành chữ hoa khi đọc CSV. Quote giữ nguyên hoa/thường, dấu câu và Unicode; nó được căn giữa ngang/dọc trong rectangle và wrap tối đa hai dòng tại khoảng trắng, không cắt từ hoặc tự giảm font. Topic dùng anchor X/Y; page number dùng số thứ tự Topic bắt đầu từ 1; keyword list dùng đúng 20 Keyword hiển thị theo column-major, 5 từ cho mỗi cột trong 4 cột. Quote không vừa vùng sẽ fail bằng `quote_layout_overflow` với row, Topic và nội dung Quote.
 
 ```text
-input/{book}/.workspace/cache/{brand}/
+input/{book}/.workspace/cache/
 ├─ manifest.json
 └─ topics/
    └─ 001/
@@ -106,7 +106,7 @@ Desktop dùng sidebar `Books`, `Brands`, `Tasks`, `Settings` và lấy applicati
 
 Mỗi book lưu chứng nhận CSV tại `input/{book}/.workspace/data.validation.json`. Refresh chỉ so certificate với metadata; nút **Validate CSV** mới đọc nội dung, tính SHA-256 và tổng hợp lỗi theo dòng/topic. **Process** chỉ chạy khi CSV và Brand đang được chứng nhận, đồng thời khóa `data.csv` và đối chiếu lại content hash để phát hiện thay đổi ngay cả khi size/timestamp không đổi.
 
-Process giữ các PNG puzzle/answer trong `.workspace/cache/{brand}`, xuất Answer thành JPEG quality 85 tại `output/answer/{index:000}.jpg`, rồi tạo `output/{book}.interior.pdf`. PDF có thứ tự Front theo natural filename, toàn bộ puzzle page theo topic, rồi Back theo natural filename; Answer không nằm trong PDF. Raster `2588x3375` được nhúng nguyên vẹn vào trang `2588/300 × 3375/300 inch`, không resize/downsample. PDF, Answer và output manifest được kiểm tra trước khi atomic publish; lượt chạy lỗi hoặc bị hủy không thay output thành công trước đó.
+Process giữ các PNG puzzle/answer trong `.workspace/cache/topics/{index}`, xuất Answer thành JPEG quality 85 tại `output/answer/{index:000}.jpg`, rồi tạo `output/{book}.interior.pdf`. PDF có thứ tự Front theo natural filename, toàn bộ puzzle page theo topic, rồi Back theo natural filename; Answer không nằm trong PDF. Raster `2588x3375` được nhúng nguyên vẹn vào trang `2588/300 × 3375/300 inch`, không resize/downsample. PDF, Answer và output manifest được kiểm tra trước khi atomic publish; lượt chạy lỗi hoặc bị hủy không thay output thành công trước đó.
 
 ```text
 brands/{brand}/
@@ -123,7 +123,7 @@ Workspace startup chỉ liệt kê file, đọc metadata và so certificate; kh�
 
 Brand Detail cung cấp **Draw demo** để render một trang puzzle mẫu với cả hai layout và settings đã lưu vào `brands/{brand}/page_layout.preview.png`. Preview chạy trong background queue, không sửa layout nguồn hay certificate validation; **Open folder** mở trực tiếp thư mục brand để xem file kết quả ở kích thước đầy đủ.
 
-Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Migration chỉ diễn ra trong memory; lần Save Brand tiếp theo ghi schema canonical gồm text anchor/alignment và bốn keyword column anchors.
+Reader vẫn nhận brand JSON cũ dùng `rectangle` cho Topic, Keyword list và Page number. Brand cũ thiếu Quote được nạp default trong memory và hiển thị **Settings update required**; Validate brand, Draw demo và Process bị khóa cho tới khi người dùng bấm Save Brand. Lần Save tiếp theo ghi schema canonical gồm Quote rectangle/font, text anchor/alignment và bốn keyword column anchors.
 
 Quy ước kích thước và bố cục Desktop được ghi tại [Desktop UI guidelines](docs/ui-guidelines.md). UI dùng baseline `1600x900`; `MainWindow` có kích thước khởi tạo và tối thiểu `1610x910` để chừa khoảng trống quanh nội dung.
 

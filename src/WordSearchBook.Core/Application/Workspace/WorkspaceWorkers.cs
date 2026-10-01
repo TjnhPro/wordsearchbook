@@ -205,6 +205,7 @@ public sealed class BrandCreateWorker(
 
 public sealed class BrandValidationWorker(
     IBrandValidationService validationService,
+    IWordSearchSettingsReader settingsReader,
     IWorkspaceSnapshotService snapshotService)
     : BackgroundTaskWorker<BrandValidationRequest, BrandValidationTaskResult>
 {
@@ -217,6 +218,19 @@ public sealed class BrandValidationWorker(
     {
         try
         {
+            var global = await settingsReader.ReadGlobalAsync(request.RootPath, cancellationToken);
+            var settings = await settingsReader.ReadBrandAsync(
+                request.RootPath,
+                request.BrandId,
+                global,
+                cancellationToken);
+            if (settings.RequiresSave)
+            {
+                throw new WordSearchGenerationException(
+                    "brand_settings_update_required",
+                    $"Brand '{request.BrandId}' settings must be saved to add Quote settings before validation.");
+            }
+
             context.Report("Validating brand assets", subject: request.BrandId);
             var validation = await validationService.ValidateAsync(request.RootPath, request.BrandId, cancellationToken);
             context.Report("Refreshing workspace", subject: request.BrandId);

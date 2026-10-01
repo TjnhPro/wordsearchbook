@@ -8,7 +8,7 @@ public interface IWordSearchSettingsReader
         string rootPath,
         CancellationToken cancellationToken = default);
 
-    Task<BrandWordSearchSettings> ReadBrandAsync(
+    Task<BrandSettingsReadResult> ReadBrandAsync(
         string rootPath,
         string brandId,
         GlobalWordSearchSettings global,
@@ -19,6 +19,10 @@ public interface IWordSearchSettingsReader
         string brandId,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record BrandSettingsReadResult(
+    BrandWordSearchSettings Settings,
+    bool RequiresSave);
 
 public interface IWordSearchSettingsWriter
 {
