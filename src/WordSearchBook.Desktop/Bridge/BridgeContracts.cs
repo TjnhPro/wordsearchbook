@@ -45,6 +45,10 @@ internal sealed record BackgroundTaskDetail(
     BackgroundTaskBridgeSnapshot Task,
     WorkspaceSnapshot? Result,
     BrandValidationResult? BrandValidationResult = null,
-    BrandPagePreviewResult? BrandPagePreviewResult = null);
+    BrandPagePreviewResult? BrandPagePreviewResult = null,
+    BookDataValidationResult? BookDataValidationResult = null,
+    BookProcessingResult? BookProcessingResult = null);
 
 internal sealed record BrandFolderOpened(string BrandId);
+
+internal sealed record BookOutputFolderOpened(string BookId);

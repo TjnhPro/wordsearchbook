@@ -6,6 +6,7 @@
   <ItemGroup>
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.12" />
     <ProjectReference Include="..\WordSearchBook.Core\WordSearchBook.Core.csproj" />
   </ItemGroup>

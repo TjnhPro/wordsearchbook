@@ -112,7 +112,7 @@ public sealed class CsvWordSearchInputReaderTests
     public async Task RejectsDuplicateNormalizedWordSearchKey()
     {
         var rows = CreateValidRows();
-        rows[1] = "Animals,Duplicate Keyword,WORDAB";
+        rows[1] = "Animals,Duplicate,WORDAB";
         var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
 
         try
@@ -121,6 +121,57 @@ public sealed class CsvWordSearchInputReaderTests
                 new CsvWordSearchInputReader().ReadAsync(path));
 
             Assert.Equal("duplicate_word", exception.Code);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task UsesConfiguredMaximumKeywordLengthIgnoringWhitespace()
+    {
+        var rows = CreateValidRows();
+        rows[0] = "Animals,Too Long,WORDZZ";
+        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                new CsvWordSearchInputReader().ReadAsync(path, maximumKeywordLength: 6));
+
+            Assert.Equal("keyword_too_long", exception.Code);
+            Assert.Contains("CSV row 2, topic 'ANIMALS'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("has 7 characters excluding spaces; the maximum is 6", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("change Max Keyword characters in Global Settings", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("", "word_invalid", "Word Search Key is empty. Enter letters A-Z.")]
+    [InlineData("BAD-KEY", "word_invalid", "contains unsupported characters. Use letters A-Z only")]
+    [InlineData("ABCDEFGHIJKLMNOPQRSTU", "word_too_long", "has 21 letters; the maximum is 20")]
+    public async Task ReportsActionableWordSearchKeyErrors(
+        string wordSearchKey,
+        string expectedCode,
+        string expectedMessage)
+    {
+        var rows = CreateValidRows();
+        rows[0] = $"Animals,Keyword 1,{wordSearchKey}";
+        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                new CsvWordSearchInputReader().ReadAsync(path));
+
+            Assert.Equal(expectedCode, exception.Code);
+            Assert.Contains("CSV row 2, topic 'ANIMALS'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
         }
         finally
         {

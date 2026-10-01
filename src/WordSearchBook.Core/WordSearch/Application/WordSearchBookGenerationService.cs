@@ -46,7 +46,7 @@ public sealed class WordSearchBookGenerationService(
         var settings = await settingsReader.ReadAsync(rootPath, request.BrandId, cancellationToken);
         var dataCsvPath = Path.Combine(rootPath, "input", request.BookId, "data.csv");
         var pageLayoutPath = Path.Combine(rootPath, "brands", request.BrandId, "page_layout.png");
-        var topics = await inputReader.ReadAsync(dataCsvPath, cancellationToken);
+        var topics = await inputReader.ReadAsync(dataCsvPath, settings.Global.MaximumKeywordLength, cancellationToken);
         var generatedTopics = new List<WordSearchTopicArtifactSet>(topics.Count);
 
         foreach (var topic in topics)

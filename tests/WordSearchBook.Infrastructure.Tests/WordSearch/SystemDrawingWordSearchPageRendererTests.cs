@@ -82,7 +82,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     }
 
     [Fact]
-    public void RejectsTextThatCrossesPageBoundary()
+    public void ReportsTopicOutsidePrintablePage()
     {
         var directory = CreateTemporaryDirectory();
         try
@@ -107,7 +107,10 @@ public sealed class SystemDrawingWordSearchPageRendererTests
                     settings,
                     WordSearchArtifactKind.Page));
 
-            Assert.Equal("page_text_overflow", exception.Code);
+            Assert.Equal("page_text_boundary_overflow", exception.Code);
+            Assert.Equal(
+                "Topic 'AMAZING ANIMALS' is outside the printable page. Adjust the Topic position in Brand Settings.",
+                exception.Message);
         }
         finally
         {
@@ -116,7 +119,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     }
 
     [Fact]
-    public void RejectsKeywordThatCrossesNeighboringColumnSlot()
+    public void ReportsKeywordsThatOverlapAcrossColumns()
     {
         var directory = CreateTemporaryDirectory();
         try
@@ -150,8 +153,170 @@ public sealed class SystemDrawingWordSearchPageRendererTests
                     settings,
                     WordSearchArtifactKind.Page));
 
-            Assert.Equal("page_text_overflow", exception.Code);
-            Assert.Contains("neighboring", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("keyword_collision", exception.Code);
+            Assert.Contains("CSV row 2, topic 'AMAZING ANIMALS'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("overlaps Keyword", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Adjust the keyword columns or row spacing", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsKeywordThatIsTooWideForItsColumn()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    KeywordList = settings.Brand.KeywordList with
+                    {
+                        StepY = 150,
+                        Font = new FontSettings("Arial", 20, "#000000")
+                    }
+                }
+            };
+            var topic = CreateTopic(index => index == 5 ? "GROUNDED BREATH" : "A");
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    path,
+                    topic,
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("keyword_slot_width_overflow", exception.Code);
+            Assert.Contains("CSV row 7, topic 'AMAZING ANIMALS'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Keyword 'GROUNDED BREATH' is too wide for keyword column 2", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Shorten the Keyword", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsKeywordThatIsTooTallForItsRow()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    KeywordList = settings.Brand.KeywordList with { StepY = 1 }
+                }
+            };
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    path,
+                    CreateTopic(),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("keyword_slot_height_overflow", exception.Code);
+            Assert.Contains("Keyword 'KEYWORD 01' is too tall for its row", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("increase the keyword row spacing", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsKeywordOutsidePrintablePageWithCsvContext()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    KeywordList = settings.Brand.KeywordList with
+                    {
+                        Columns =
+                        [
+                            new KeywordColumnAnchor(0, 1000),
+                            new KeywordColumnAnchor(800, 1000),
+                            new KeywordColumnAnchor(1300, 1000),
+                            new KeywordColumnAnchor(1800, 1000)
+                        ]
+                    }
+                }
+            };
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    path,
+                    CreateTopic(),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("page_text_boundary_overflow", exception.Code);
+            Assert.Contains("CSV row 2, topic 'AMAZING ANIMALS': Keyword 'KEYWORD 01'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("outside the printable page", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsPageNumberOutsidePrintablePage()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    PageNumber = settings.Brand.PageNumber with { X = 0, Alignment = TextAlignment.Center }
+                }
+            };
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    path,
+                    CreateTopic(),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("page_text_boundary_overflow", exception.Code);
+            Assert.Equal(
+                "Page number '1' is outside the printable page. Adjust the Page number position in Brand Settings.",
+                exception.Message);
         }
         finally
         {
@@ -179,11 +344,14 @@ public sealed class SystemDrawingWordSearchPageRendererTests
         return new WordSearchSettingsBundle(WordSearchSettingsDefaults.CreateGlobal(), brand);
     }
 
-    private static WordSearchTopic CreateTopic() => new(
+    private static WordSearchTopic CreateTopic(Func<int, string>? keywordFactory = null) => new(
         1,
         "AMAZING ANIMALS",
         Enumerable.Range(1, 20)
-            .Select(index => new WordSearchEntry(index + 1, $"KEYWORD {index:00}", $"KEYWORD{index:00}"))
+            .Select(index => new WordSearchEntry(
+                index + 1,
+                keywordFactory?.Invoke(index - 1) ?? $"KEYWORD {index:00}",
+                $"KEYWORD{index:00}"))
             .ToArray());
 
     private static RenderedWordSearchArtifact CreateBoardArtifact(WordSearchArtifactKind kind)

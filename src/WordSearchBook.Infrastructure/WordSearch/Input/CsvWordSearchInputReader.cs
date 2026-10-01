@@ -16,9 +16,11 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
 
     public async Task<IReadOnlyList<WordSearchTopic>> ReadAsync(
         string dataCsvPath,
+        int maximumKeywordLength = WordSearchSettingsDefaults.MaximumKeywordLength,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataCsvPath);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumKeywordLength, 1);
 
         if (!File.Exists(dataCsvPath))
         {
@@ -49,8 +51,15 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
                 cancellationToken.ThrowIfCancellationRequested();
                 var sourceRow = csv.Context.Parser?.Row ?? 0;
                 var topicName = RequireUppercase(csv.GetField("Topic"), "Topic", sourceRow);
-                var keyword = RequireUppercase(csv.GetField("Keyword"), "Keyword", sourceRow);
-                var wordSearchKey = NormalizeWordSearchKey(csv.GetField("Word Search Key"), sourceRow);
+                var keyword = RequireKeyword(csv.GetField("Keyword"), sourceRow, topicName);
+                var compactKeywordLength = keyword.Count(character => !char.IsWhiteSpace(character));
+                if (compactKeywordLength > maximumKeywordLength)
+                {
+                    throw new WordSearchGenerationException(
+                        "keyword_too_long",
+                        $"CSV row {sourceRow}, topic '{topicName}': Keyword '{keyword}' has {compactKeywordLength} characters excluding spaces; the maximum is {maximumKeywordLength}. Shorten the Keyword or change Max Keyword characters in Global Settings.");
+                }
+                var wordSearchKey = NormalizeWordSearchKey(csv.GetField("Word Search Key"), sourceRow, topicName);
 
                 if (!topicsByName.TryGetValue(topicName, out var builder))
                 {
@@ -139,25 +148,46 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
         return trimmed.ToUpperInvariant();
     }
 
-    private static string NormalizeWordSearchKey(string? value, int sourceRow)
+    private static string RequireKeyword(string? value, int sourceRow, string topicName)
     {
-        var normalized = new string((value ?? string.Empty)
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new WordSearchGenerationException(
+                "keyword_invalid",
+                $"CSV row {sourceRow}, topic '{topicName}': Keyword is empty. Enter the text to display on the page.");
+        }
+
+        return trimmed.ToUpperInvariant();
+    }
+
+    private static string NormalizeWordSearchKey(string? value, int sourceRow, string topicName)
+    {
+        var rawValue = value ?? string.Empty;
+        var normalized = new string(rawValue
             .Where(character => !char.IsWhiteSpace(character))
             .ToArray())
             .ToUpperInvariant();
 
-        if (normalized.Length == 0 || normalized.Any(character => character is < 'A' or > 'Z'))
+        if (normalized.Length == 0)
         {
             throw new WordSearchGenerationException(
                 "word_invalid",
-                $"CSV row {sourceRow}: Word Search Key must contain only letters A-Z after whitespace is removed.");
+                $"CSV row {sourceRow}, topic '{topicName}': Word Search Key is empty. Enter letters A-Z.");
+        }
+
+        if (normalized.Any(character => character is < 'A' or > 'Z'))
+        {
+            throw new WordSearchGenerationException(
+                "word_invalid",
+                $"CSV row {sourceRow}, topic '{topicName}': Word Search Key '{rawValue.Trim()}' contains unsupported characters. Use letters A-Z only; spaces are removed automatically.");
         }
 
         if (normalized.Length > MaximumWordLength)
         {
             throw new WordSearchGenerationException(
                 "word_too_long",
-                $"CSV row {sourceRow}: Word Search Key '{normalized}' exceeds {MaximumWordLength} letters.");
+                $"CSV row {sourceRow}, topic '{topicName}': Word Search Key '{normalized}' has {normalized.Length} letters; the maximum is {MaximumWordLength}. Shorten the Word Search Key.");
         }
 
         return normalized;
