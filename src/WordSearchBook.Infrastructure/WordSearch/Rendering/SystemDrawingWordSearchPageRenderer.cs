@@ -107,16 +107,13 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
     {
         using var topicFont = SystemDrawingRenderSupport.CreateFont(settings.Brand.Topic.Font);
         using var topicBrush = new SolidBrush(SystemDrawingRenderSupport.ParseColor(settings.Brand.Topic.Font.Color));
-        DrawAnchoredText(
+        DrawTopic(
             graphics,
             topic.Name,
-            settings.Brand.Topic.X,
-            settings.Brand.Topic.Y,
-            settings.Brand.Topic.Alignment,
+            settings.Brand.Topic,
             topicFont,
             topicBrush,
-            settings.Global.Page,
-            $"Topic '{topic.Name}' is outside the printable page. Adjust the Topic position in Brand Settings.");
+            settings.Global.Page);
 
         DrawKeywords(graphics, topic, settings);
 
@@ -132,6 +129,33 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
             pageBrush,
             settings.Global.Page,
             $"Page number '{pageNumber}' is outside the printable page. Adjust the Page number position in Brand Settings.");
+    }
+
+    private static void DrawTopic(
+        Graphics graphics,
+        string topicName,
+        AnchoredTextSettings settings,
+        Font font,
+        Brush brush,
+        PageSize pageSize)
+    {
+        var lines = TopicLineLayout.Split(topicName);
+        var lineHeight = font.GetHeight(graphics);
+
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var line = lines[index];
+            DrawAnchoredText(
+                graphics,
+                line,
+                settings.X,
+                settings.Y + (index * lineHeight),
+                settings.Alignment,
+                font,
+                brush,
+                pageSize,
+                $"Topic '{topicName}' line {index + 1} '{line}' is outside the printable page. Adjust the Topic position in Brand Settings.");
+        }
     }
 
     private static void DrawKeywords(
@@ -225,8 +249,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
     private static void DrawAnchoredText(
         Graphics graphics,
         string value,
-        int x,
-        int y,
+        float x,
+        float y,
         TextAlignment alignment,
         Font font,
         Brush brush,
@@ -240,8 +264,8 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
     private static RectangleF MeasureAnchoredText(
         Graphics graphics,
         string value,
-        int x,
-        int y,
+        float x,
+        float y,
         TextAlignment alignment,
         Font font,
         PageSize pageSize,

@@ -109,7 +109,79 @@ public sealed class SystemDrawingWordSearchPageRendererTests
 
             Assert.Equal("page_text_boundary_overflow", exception.Code);
             Assert.Equal(
-                "Topic 'AMAZING ANIMALS' is outside the printable page. Adjust the Topic position in Brand Settings.",
+                "Topic 'AMAZING ANIMALS' line 1 'AMAZING' is outside the printable page. Adjust the Topic position in Brand Settings.",
+                exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DrawsMultiWordTopicAcrossTwoConsecutiveLines()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            var rendered = new SystemDrawingWordSearchPageRenderer().Render(
+                path,
+                CreateTopic("WIND DOWN STRETCH"),
+                1,
+                CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                settings,
+                WordSearchArtifactKind.Page);
+
+            using var stream = new MemoryStream(rendered.Content);
+            using var page = new Bitmap(stream);
+            using var graphics = Graphics.FromImage(page);
+            using var font = new Font(
+                settings.Brand.Topic.Font.Name,
+                settings.Brand.Topic.Font.Size,
+                FontStyle.Regular);
+            var lineHeight = font.GetHeight(graphics);
+
+            Assert.True(ContainsInk(page, settings.Brand.Topic.Y, settings.Brand.Topic.Y + lineHeight));
+            Assert.True(ContainsInk(page, settings.Brand.Topic.Y + lineHeight, settings.Brand.Topic.Y + (2 * lineHeight)));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsSecondTopicLineOutsidePrintablePage()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    Topic = settings.Brand.Topic with { Y = 3200 }
+                }
+            };
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    path,
+                    CreateTopic("WIND DOWN STRETCH"),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("page_text_boundary_overflow", exception.Code);
+            Assert.Equal(
+                "Topic 'WIND DOWN STRETCH' line 2 'DOWN STRETCH' is outside the printable page. Adjust the Topic position in Brand Settings.",
                 exception.Message);
         }
         finally
@@ -363,6 +435,27 @@ public sealed class SystemDrawingWordSearchPageRendererTests
                 keywordFactory?.Invoke(index - 1) ?? $"KEYWORD {index:00}",
                 $"KEYWORD{index:00}"))
             .ToArray());
+
+    private static WordSearchTopic CreateTopic(string topicName) =>
+        CreateTopic() with { Name = topicName };
+
+    private static bool ContainsInk(Bitmap image, float top, float bottom)
+    {
+        var firstRow = Math.Max(0, (int)MathF.Floor(top));
+        var lastRow = Math.Min(image.Height, (int)MathF.Ceiling(bottom));
+        for (var y = firstRow; y < lastRow; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                if (image.GetPixel(x, y).ToArgb() != Color.White.ToArgb())
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     private static RenderedWordSearchArtifact CreateBoardArtifact(WordSearchArtifactKind kind)
     {
