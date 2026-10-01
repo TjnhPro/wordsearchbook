@@ -38,17 +38,42 @@ dotnet test WordSearchBook.sln --configuration Release --no-build
 dotnet run --project src/WordSearchBook.Desktop/WordSearchBook.Desktop.csproj
 ```
 
-## Public release v0.1.0
+## Release
 
-Tạo bản public local bằng:
+Tạo artifact local theo version hiện tại bằng:
 
 ```powershell
-./scripts/publish-release.ps1 -ExpectedVersion 0.1.0
+./scripts/publish-release.ps1
 ```
 
 Artifact nằm tại `artifacts/release/WordSearchBook.exe` cùng checksum SHA-256. EXE self-contained chứa .NET Runtime, frontend và icon; WebView2 Runtime vẫn dùng bản hệ thống. Đặt EXE trong một thư mục có quyền ghi vì `brands/`, `input/`, `settings.json` và workspace được quản lý cạnh ứng dụng. Khi cập nhật chỉ cần đóng app và thay EXE, dữ liệu không bị đóng gói hoặc ghi đè.
 
-Push tag `v0.1.0` từ `main` sẽ chạy kiểm thử, xác minh package chỉ có một EXE và tạo GitHub Release. Bản MVP chưa được Authenticode-sign nên Windows SmartScreen có thể hiển thị cảnh báo. Chi tiết: [release notes](docs/release-0.1.md).
+Để phát hành chính thức từ `main`:
+
+```powershell
+git switch main
+./scripts/release.ps1
+```
+
+Mặc định script tự tăng patch (`0.1.0` thành `0.1.1`). Có thể chỉ định version lớn hơn bằng `./scripts/release.ps1 -Version 0.2.0`. Script yêu cầu working tree sạch, `main` đã đồng bộ, CI của commit hiện tại thành công và GitHub CLI (`gh`) đã đăng nhập. Nó đồng bộ version .NET/frontend, tạo commit và tag, push atomically, theo dõi release workflow rồi xác nhận đúng hai asset `WordSearchBook.exe` và `WordSearchBook.exe.sha256`.
+
+Bản MVP chưa được Authenticode-sign nên Windows SmartScreen có thể hiển thị cảnh báo. Chi tiết phiên bản nền `0.1.0`: [release notes](docs/release-0.1.md).
+
+## Dọn branch đã merge
+
+Xem trước các branch có thể dọn mà không thay đổi repository:
+
+```powershell
+./scripts/clear-branches.ps1
+```
+
+Sau khi review danh sách, thực hiện xóa remote branch và local branch tương ứng:
+
+```powershell
+./scripts/clear-branches.ps1 -Delete
+```
+
+Script luôn bỏ qua `main`, branch hiện tại, branch chưa được merge hoàn toàn và branch local cùng tên đã phân kỳ.
 
 ## Trạng thái baseline
 

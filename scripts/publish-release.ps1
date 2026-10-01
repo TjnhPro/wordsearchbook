@@ -1,7 +1,7 @@
 param(
     [string]$Configuration = "Release",
     [string]$RuntimeIdentifier = "win-x64",
-    [string]$ExpectedVersion = "0.1.0",
+    [string]$ExpectedVersion = "",
     [switch]$SkipVerification
 )
 
@@ -34,7 +34,10 @@ try {
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($version)) {
         throw "Could not read the Desktop project version."
     }
-    if ($version -ne $ExpectedVersion) {
+    if ([string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+        $ExpectedVersion = $version
+    }
+    elseif ($version -ne $ExpectedVersion) {
         throw "Desktop version '$version' does not match expected version '$ExpectedVersion'."
     }
 
