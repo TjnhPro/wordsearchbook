@@ -36,6 +36,12 @@ Assert-Throws { ConvertTo-StrictReleaseVersion "v0.1.1" } "M.m.p"
 Assert-Throws { ConvertTo-StrictReleaseVersion "01.1.1" } "M.m.p"
 Assert-Throws { Resolve-TargetVersion ([Version]"0.1.0") "0.1.0" } "must be greater"
 
+$mainWorkflow = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/build-and-test.yml") -Raw
+Assert-True ($mainWorkflow.Contains("./tests/ReleaseScripts/release-orchestrator.test.ps1")) "Main CI must exercise the release orchestrator tests."
+Assert-True ($mainWorkflow.Contains("./tests/ReleaseScripts/clear-branches.test.ps1")) "Main CI must exercise the branch cleanup tests."
+Assert-True ($mainWorkflow.Contains("./scripts/publish-release.ps1 -SkipVerification")) "Main CI must package using the canonical version."
+Assert-True (-not $mainWorkflow.Contains("-ExpectedVersion 0.1.0")) "Main CI must not pin the initial release version."
+
 $propsTemplate = @'
 <Project>
   <PropertyGroup>
