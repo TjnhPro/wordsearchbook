@@ -6,6 +6,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
         Title="Word Search Book"
+        Icon="Assets/wordsearchbook.ico"
         Width="1610"
         Height="910"
         MinWidth="1610"

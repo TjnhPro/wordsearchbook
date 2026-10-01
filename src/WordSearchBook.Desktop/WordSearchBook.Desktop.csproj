@@ -4,6 +4,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <AssemblyName>WordSearchBook</AssemblyName>
+    <ApplicationIcon>Assets\wordsearchbook.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,8 +18,25 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Frontend\index.html;Frontend\css\tailwind.css;Frontend\js\app.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Resource Include="Assets\wordsearchbook.ico" />
+    <EmbeddedResource Include="Assets\wordsearchbook-icon-1024.png"
+                      LogicalName="WordSearchBook.Desktop.Frontend.assets.wordsearchbook-icon-1024.png" />
+    <EmbeddedResource Include="Frontend\index.html"
+                      LogicalName="WordSearchBook.Desktop.Frontend.index.html" />
+    <EmbeddedResource Include="Frontend\css\tailwind.css"
+                      LogicalName="WordSearchBook.Desktop.Frontend.css.tailwind.css" />
+    <EmbeddedResource Include="Frontend\js\app.js"
+                      LogicalName="WordSearchBook.Desktop.Frontend.js.app.js" />
   </ItemGroup>
+
+  <Target Name="RemoveNonRuntimeArtifactsFromSingleFilePublish"
+          AfterTargets="Publish"
+          Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <WebView2Documentation Include="$(PublishDir)Microsoft.Web.WebView2*.xml" />
+      <PublishedDebugSymbols Include="$(PublishDir)*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(WebView2Documentation)" />
+    <Delete Files="@(PublishedDebugSymbols)" />
+  </Target>
 </Project>

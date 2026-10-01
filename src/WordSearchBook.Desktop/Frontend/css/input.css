@@ -12,7 +12,7 @@
   .app-shell { @apply grid h-screen min-h-[680px] grid-cols-[240px_minmax(0,1fr)]; }
   .sidebar { @apply flex min-h-0 flex-col border-r border-slate-200 bg-white px-3 py-5; }
   .brand-lockup { @apply flex items-center gap-3 px-2; }
-  .brand-mark { @apply grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-orange-600 text-sm font-black text-white shadow-sm; }
+  .brand-mark { @apply h-10 w-10 shrink-0 rounded-xl object-cover shadow-sm; }
   .brand-name, .brand-caption { @apply block; }
   .brand-name { @apply text-sm font-bold text-slate-900; }
   .brand-caption { @apply mt-0.5 text-xs text-slate-500; }
