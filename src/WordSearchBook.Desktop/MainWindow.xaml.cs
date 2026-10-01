@@ -1,7 +1,9 @@
 using Microsoft.Web.WebView2.Core;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using WordSearchBook.Core.Application.BackgroundTasks;
 using WordSearchBook.Desktop.Bridge;
 using WordSearchBook.Desktop.Shutdown;
@@ -78,7 +80,7 @@ public partial class MainWindow : Window
     internal static bool HasActiveTasks(IEnumerable<BackgroundTaskSnapshot> tasks) => tasks.Any(task =>
         ApplicationCloseCoordinator.IsActive(task.State));
 
-    private async void OnClosing(object? sender, CancelEventArgs e)
+    private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (allowClose)
         {
@@ -92,27 +94,52 @@ public partial class MainWindow : Window
         }
 
         closeFlowRunning = true;
+        _ = Dispatcher.BeginInvoke(RunCloseFlowAsync, DispatcherPriority.Normal);
+    }
+
+    private async void RunCloseFlowAsync()
+    {
         try
         {
             var active = await closeCoordinator.GetActiveTasksAsync();
+            if (active.Count == 0)
+            {
+                CloseApplication();
+                return;
+            }
+
             var dialog = new CloseApplicationDialog(
                 active.Count,
                 () => closeCoordinator.CancelAndWaitAsync(active, TimeSpan.FromSeconds(5)))
             {
                 Owner = this
             };
-            if (dialog.ShowDialog() != true)
-            {
-                return;
-            }
-
-            allowClose = true;
-            Close();
+            dialog.ShutdownReady += OnShutdownReady;
+            dialog.ShowDialog();
+            dialog.ShutdownReady -= OnShutdownReady;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Application close flow failed: {exception}");
+            CloseApplication();
         }
         finally
         {
             closeFlowRunning = false;
         }
+    }
+
+    private void OnShutdownReady(object? sender, EventArgs e) => CloseApplication();
+
+    private void CloseApplication()
+    {
+        if (allowClose)
+        {
+            return;
+        }
+
+        allowClose = true;
+        Close();
     }
 
     private void OnClosed(object? sender, EventArgs e)

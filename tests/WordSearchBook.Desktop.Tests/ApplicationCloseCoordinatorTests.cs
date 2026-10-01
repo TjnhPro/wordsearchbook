@@ -55,6 +55,20 @@ public sealed class ApplicationCloseCoordinatorTests
         Assert.Empty(manager.WaitedTaskIds);
     }
 
+    [Fact]
+    public async Task ContinuesClosingWhenTheSharedWaitTimesOut()
+    {
+        var task = CreateTask(BackgroundTaskState.Running);
+        var manager = new RecordingTaskManager([task]) { WaitResult = false };
+        var timeout = TimeSpan.FromMilliseconds(25);
+
+        await new ApplicationCloseCoordinator(manager).CancelAndWaitAsync([task], timeout);
+
+        Assert.Equal([task.TaskId], manager.CancelledTaskIds);
+        Assert.Equal([task.TaskId], manager.WaitedTaskIds);
+        Assert.Equal([timeout], manager.WaitTimeouts);
+    }
+
     private static BackgroundTaskSnapshot CreateTask(BackgroundTaskState state) => new(
         BackgroundTaskId.New(),
         BackgroundTaskKind.WorkspaceRefresh,
@@ -80,6 +94,8 @@ public sealed class ApplicationCloseCoordinatorTests
         public List<TimeSpan> WaitTimeouts { get; } = [];
 
         public bool AllTasksWereCancelledBeforeFirstWait { get; private set; }
+
+        public bool WaitResult { get; init; } = true;
 
         public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(
             BackgroundTaskKind kind,
@@ -118,7 +134,7 @@ public sealed class ApplicationCloseCoordinatorTests
 
             WaitedTaskIds.Add(taskId);
             WaitTimeouts.Add(timeout);
-            return ValueTask.FromResult(true);
+            return ValueTask.FromResult(WaitResult);
         }
 
         public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result)

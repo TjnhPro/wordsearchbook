@@ -4,6 +4,12 @@ namespace WordSearchBook.Desktop.Tests;
 
 public sealed class MainWindowTests
 {
+    [Fact]
+    public void ClosingWithoutTasksDoesNotRequireConfirmation()
+    {
+        Assert.False(MainWindow.HasActiveTasks([]));
+    }
+
     [Theory]
     [InlineData(BackgroundTaskState.Queued, true)]
     [InlineData(BackgroundTaskState.Running, true)]
