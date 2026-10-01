@@ -82,10 +82,10 @@ public sealed class CsvBookDataValidationServiceTests
             await File.WriteAllLinesAsync(
                 Path.Combine(root, "input", "sample-book", "data.csv"),
                 [
-                    "Topic,Keyword,Word Search Key",
-                    "Animals,This keyword is much too long,RED PANDA",
-                    "Animals,,RED PANDA",
-                    "Animals,Otter,RED PANDA"
+                    "Topic,Quote,Keyword,Word Search Key",
+                    "Animals,Steady progress,This keyword is much too long,RED PANDA",
+                    "Animals,Steady progress,,RED PANDA",
+                    "Animals,Steady progress,Otter,RED PANDA"
                 ]);
             var service = CreateService();
 
@@ -121,10 +121,10 @@ public sealed class CsvBookDataValidationServiceTests
             await File.WriteAllLinesAsync(
                 Path.Combine(root, "input", "sample-book", "data.csv"),
                 [
-                    "Topic,Keyword,Word Search Key",
-                    "Animals,Missing Key,",
-                    "Animals,Invalid Key,BAD-KEY",
-                    "Animals,Long Key,ABCDEFGHIJKLMNOPQRSTU"
+                    "Topic,Quote,Keyword,Word Search Key",
+                    "Animals,Steady progress,Missing Key,",
+                    "Animals,Steady progress,Invalid Key,BAD-KEY",
+                    "Animals,Steady progress,Long Key,ABCDEFGHIJKLMNOPQRSTU"
                 ]);
 
             var result = await CreateService().ValidateAsync(root, "sample-book");
@@ -141,6 +141,37 @@ public sealed class CsvBookDataValidationServiceTests
                 failure.Code == "word_too_long" &&
                 failure.SourceRow == 4 &&
                 failure.Message.Contains("has 21 letters; the maximum is 20", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReportsEmptyAndMismatchedQuoteWithRowAndTopicContext()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            await File.WriteAllLinesAsync(
+                Path.Combine(root, "input", "sample-book", "data.csv"),
+                [
+                    "Topic,Quote,Keyword,Word Search Key",
+                    "Animals,,First,WORDAA",
+                    "Animals,Keep going,Second,WORDAB",
+                    "Animals,A different quote,Third,WORDAC"
+                ]);
+
+            var result = await CreateService().ValidateAsync(root, "sample-book");
+
+            var empty = Assert.Single(result.Failures, failure => failure.Code == "quote_invalid");
+            Assert.Equal(2, empty.SourceRow);
+            Assert.Equal("ANIMALS", empty.Topic);
+            var mismatch = Assert.Single(result.Failures, failure => failure.Code == "quote_mismatch");
+            Assert.Equal(4, mismatch.SourceRow);
+            Assert.Equal("ANIMALS", mismatch.Topic);
+            Assert.Contains("CSV row 3", mismatch.Message, StringComparison.Ordinal);
         }
         finally
         {

@@ -28,7 +28,14 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
     {
         var global = await ReadGlobalAsync(rootPath, cancellationToken);
         var brand = await ReadBrandAsync(rootPath, brandId, global, cancellationToken);
-        return new WordSearchSettingsBundle(global, brand);
+        if (brand.RequiresSave)
+        {
+            throw new WordSearchGenerationException(
+                "brand_settings_update_required",
+                $"Brand '{brandId}' settings must be saved to add Quote settings before validation, preview, or processing.");
+        }
+
+        return new WordSearchSettingsBundle(global, brand.Settings);
     }
 
     public async Task<GlobalWordSearchSettings> ReadGlobalAsync(
@@ -43,7 +50,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         return global;
     }
 
-    public async Task<BrandWordSearchSettings> ReadBrandAsync(
+    public async Task<BrandSettingsReadResult> ReadBrandAsync(
         string rootPath,
         string brandId,
         GlobalWordSearchSettings global,
@@ -55,9 +62,10 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         var document = await ReadJsonAsync<BrandSettingsDocument>(
             Path.Combine(rootPath, "brands", brandId, "settings.json"),
             cancellationToken);
-        var brand = MapBrand(document);
+        var requiresSave = document.Quote is null;
+        var brand = MapBrand(document, requiresSave);
         ValidateBrand(global, brand);
-        return brand;
+        return new BrandSettingsReadResult(brand, requiresSave);
     }
 
     private static async Task<T> ReadJsonAsync<T>(string path, CancellationToken cancellationToken)
@@ -181,6 +189,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
     {
         ArgumentNullException.ThrowIfNull(brand);
         ValidateAnchor("topic", brand.Topic, global.Page);
+        ValidateRegion("quote", brand.Quote, global.Page);
         ValidateRegion("boardGame", brand.BoardGame, global.Page);
         ValidateKeywordList(brand.KeywordList, global.Page);
         ValidateAnchor("pageNumber", brand.PageNumber, global.Page);
@@ -199,7 +208,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
         ValidateColor("answerLine.color", brand.AnswerLine.Color);
     }
 
-    private static BrandWordSearchSettings MapBrand(BrandSettingsDocument document)
+    private static BrandWordSearchSettings MapBrand(BrandSettingsDocument document, bool requiresSave)
     {
         if (document.Topic.ValueKind == JsonValueKind.Undefined ||
             document.KeywordList.ValueKind == JsonValueKind.Undefined ||
@@ -212,6 +221,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
 
         return new BrandWordSearchSettings(
             ReadAnchor(document.Topic, "topic", TextAlignment.Center),
+            requiresSave ? WordSearchSettingsDefaults.CreateBrand().Quote : document.Quote!,
             document.BoardGame,
             ReadKeywordList(document.KeywordList),
             ReadAnchor(document.PageNumber, "pageNumber", TextAlignment.Left),
@@ -400,6 +410,7 @@ public sealed partial class JsonWordSearchSettingsReader : IWordSearchSettingsRe
 
     private sealed record BrandSettingsDocument(
         JsonElement Topic,
+        TextRegionSettings? Quote,
         TextRegionSettings? BoardGame,
         JsonElement KeywordList,
         JsonElement PageNumber,

@@ -21,6 +21,7 @@ public static class BrandPagePreviewSample
 {
     public const string OutputFileName = "page_layout.preview.png";
     public const string TopicName = "AMAZING ANIMALS";
+    public const string Quote = "Every puzzle is a new little adventure.";
     public const int PageNumber = 1;
 
     public static readonly IReadOnlyList<string> Keywords =
@@ -50,6 +51,7 @@ public static class BrandPagePreviewSample
     public static WordSearchTopic CreateTopic() => new(
         PageNumber,
         TopicName,
+        Quote,
         Keywords
             .Select((keyword, index) => new WordSearchEntry(
                 index + 1,

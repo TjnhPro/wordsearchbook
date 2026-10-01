@@ -8,7 +8,7 @@ namespace WordSearchBook.Infrastructure.WordSearch.Caching;
 
 public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublisher
 {
-    private const int ManifestSchemaVersion = 1;
+    private const int ManifestSchemaVersion = 2;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -77,6 +77,7 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
                 var manifestTopic = new ManifestTopic(
                     topicSet.Topic.Index,
                     topicSet.Topic.Name,
+                    topicSet.Topic.Quote,
                     topicSet.Topic.Entries.Select(entry => new ManifestEntry(
                         entry.SourceRow,
                         entry.Keyword,
@@ -309,6 +310,7 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
     private sealed record ManifestTopic(
         int Index,
         string Name,
+        string Quote,
         IReadOnlyList<ManifestEntry> Entries,
         IReadOnlyDictionary<string, string> Artifacts,
         IReadOnlyList<ManifestPlacement> Placements);

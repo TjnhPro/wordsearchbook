@@ -76,7 +76,13 @@ public sealed class WordSearchWorkspaceSnapshotService(
             try
             {
                 var settings = await settingsReader.ReadBrandAsync(rootPath, brandId, global, cancellationToken);
-                results.Add(new WorkspaceBrand(brandId, settings, validation, assetIssue, assetFolders));
+                results.Add(new WorkspaceBrand(
+                    brandId,
+                    settings.Settings,
+                    validation,
+                    assetIssue,
+                    assetFolders,
+                    settings.RequiresSave));
             }
             catch (WordSearchGenerationException exception)
             {

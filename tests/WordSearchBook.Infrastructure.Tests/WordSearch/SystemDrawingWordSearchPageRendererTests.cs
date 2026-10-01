@@ -105,6 +105,78 @@ public sealed class SystemDrawingWordSearchPageRendererTests
         }
     }
 
+    [Theory]
+    [InlineData(WordSearchArtifactKind.Page, WordSearchArtifactKind.BoardGame)]
+    [InlineData(WordSearchArtifactKind.PageAnswer, WordSearchArtifactKind.BoardGameAnswer)]
+    public void DrawsQuoteOnPuzzleAndAnswerPages(
+        WordSearchArtifactKind pageKind,
+        WordSearchArtifactKind boardKind)
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var layoutPath = Path.Combine(directory, "page_layout.png");
+            WriteImage(layoutPath, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+
+            var rendered = new SystemDrawingWordSearchPageRenderer().Render(
+                layoutPath,
+                FrontLayoutPath(directory),
+                CreateTopic(),
+                1,
+                CreateBoardArtifact(boardKind),
+                settings,
+                pageKind);
+
+            using var stream = new MemoryStream(rendered.Content);
+            using var page = new Bitmap(stream);
+            var rectangle = settings.Brand.Quote.Rectangle;
+            Assert.True(ContainsInk(page, rectangle.Y, rectangle.Y + rectangle.Height));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsQuoteThatCannotFitInTwoLinesWithTopicContext()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var layoutPath = Path.Combine(directory, "page_layout.png");
+            WriteImage(layoutPath, 2588, 3375, Color.White);
+            var settings = CreateSettings() with
+            {
+                Brand = CreateSettings().Brand with
+                {
+                    Quote = new TextRegionSettings(
+                        new LayoutRectangle(300, 1800, 10, 200),
+                        new FontSettings("Arial", 20, "#000000"))
+                }
+            };
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    layoutPath,
+                    FrontLayoutPath(directory),
+                    CreateTopic(),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    settings,
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("quote_layout_overflow", exception.Code);
+            Assert.Contains("CSV row 2, topic 'AMAZING ANIMALS'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Every puzzle is a new little adventure.", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void RejectsMissingFrontLayoutForPuzzlePageWithStableCode()
     {
@@ -513,6 +585,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     {
         var brand = new BrandWordSearchSettings(
             new AnchoredTextSettings(100, 100, new FontSettings("Arial", 20, "#000000"), TextAlignment.Left),
+            new TextRegionSettings(new LayoutRectangle(300, 1800, 1800, 200), new FontSettings("Arial", 20, "#000000")),
             new TextRegionSettings(new LayoutRectangle(100, 300, 400, 400), new FontSettings("Arial", 12, "#000000")),
             new KeywordListSettings(
                 [
@@ -532,6 +605,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     private static WordSearchTopic CreateTopic(Func<int, string>? keywordFactory = null) => new(
         1,
         "AMAZING ANIMALS",
+        "Every puzzle is a new little adventure.",
         Enumerable.Range(1, 20)
             .Select(index => new WordSearchEntry(
                 index + 1,

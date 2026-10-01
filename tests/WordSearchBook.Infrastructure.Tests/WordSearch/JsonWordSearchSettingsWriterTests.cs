@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
@@ -115,7 +116,9 @@ public sealed class JsonWordSearchSettingsWriterTests
             Assert.Contains("\"alignment\": \"Center\"", json, StringComparison.Ordinal);
             Assert.Contains("\"columns\"", json, StringComparison.Ordinal);
             Assert.Contains("\"stepY\": 80", json, StringComparison.Ordinal);
-            Assert.DoesNotContain("\"rectangle\"", json.AsSpan(0, json.IndexOf("\"boardGame\"", StringComparison.Ordinal)), StringComparison.Ordinal);
+            using var document = JsonDocument.Parse(json);
+            Assert.False(document.RootElement.GetProperty("topic").TryGetProperty("rectangle", out _));
+            Assert.True(document.RootElement.GetProperty("quote").TryGetProperty("rectangle", out _));
             Assert.Empty(Directory.EnumerateFiles(Path.Combine(root, "brands", "demo"), "*.tmp"));
         }
         finally

@@ -9,7 +9,7 @@ public sealed class WordSearchDomainContractTests
     public void KeepsInputDisplayValueSeparateFromSearchKey()
     {
         var entry = new WordSearchEntry(2, "Red Panda", "REDPANDA");
-        var topic = new WordSearchTopic(1, "Amazing Animals", [entry]);
+        var topic = new WordSearchTopic(1, "Amazing Animals", "Stay curious.", [entry]);
 
         Assert.Equal("Red Panda", topic.Entries[0].Keyword);
         Assert.Equal("REDPANDA", topic.Entries[0].WordSearchKey);
@@ -46,6 +46,7 @@ public sealed class WordSearchDomainContractTests
         var settings = WordSearchSettingsDefaults.CreateBrand();
 
         Assert.Equal((1200, 100, TextAlignment.Center), (settings.Topic.X, settings.Topic.Y, settings.Topic.Alignment));
+        Assert.Equal(new LayoutRectangle(300, 3000, 1988, 220), settings.Quote.Rectangle);
         Assert.Equal(new LayoutRectangle(200, 400, 2000, 2000), settings.BoardGame.Rectangle);
         Assert.Equal(4, settings.KeywordList.Columns.Count);
         Assert.Equal(80, settings.KeywordList.StepY);

@@ -22,6 +22,7 @@ public sealed class CsvWordSearchInputReaderTests
         var topic = Assert.Single(topics);
         Assert.Equal(1, topic.Index);
         Assert.Equal("AMAZING ANIMALS", topic.Name);
+        Assert.Equal("Every puzzle is a new little adventure.", topic.Quote);
         Assert.Equal(20, topic.Entries.Count);
         Assert.Equal("RED PANDA", topic.Entries[0].Keyword);
         Assert.Equal("REDPANDA", topic.Entries[0].WordSearchKey);
@@ -32,8 +33,8 @@ public sealed class CsvWordSearchInputReaderTests
     public async Task PreservesQuotedCommaInDisplayKeyword()
     {
         var rows = CreateValidRows();
-        rows[0] = "Animals,\"Panda, Red\",RED PANDA";
-        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+        rows[0] = "Animals,Steady progress,\"Panda, Red\",RED PANDA";
+        var path = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", rows);
 
         try
         {
@@ -52,15 +53,16 @@ public sealed class CsvWordSearchInputReaderTests
     public async Task GroupsTopicsAfterUppercaseNormalization()
     {
         var rows = CreateValidRows();
-        rows[0] = "  animals  ,  Red Panda  ,RED PANDA";
-        rows[1] = "ANIMALS,Blue Whale,BLUE WHALE";
-        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+        rows[0] = "  animals  ,  Steady   progress  ,  Red Panda  ,RED PANDA";
+        rows[1] = "ANIMALS,Steady progress,Blue Whale,BLUE WHALE";
+        var path = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", rows);
 
         try
         {
             var topic = Assert.Single(await new CsvWordSearchInputReader().ReadAsync(path));
 
             Assert.Equal("ANIMALS", topic.Name);
+            Assert.Equal("Steady progress", topic.Quote);
             Assert.Equal("RED PANDA", topic.Entries[0].Keyword);
             Assert.Equal("BLUE WHALE", topic.Entries[1].Keyword);
         }
@@ -71,11 +73,63 @@ public sealed class CsvWordSearchInputReaderTests
     }
 
     [Fact]
+    public async Task NormalizesQuoteWhitespaceWithoutChangingCasePunctuationOrUnicode()
+    {
+        var rows = CreateValidRows();
+        for (var index = 0; index < rows.Length; index++)
+        {
+            rows[index] = rows[index].Replace("Steady progress", "  Dịu dàng   từng bước!  ", StringComparison.Ordinal);
+        }
+        var path = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", rows);
+
+        try
+        {
+            var topic = Assert.Single(await new CsvWordSearchInputReader().ReadAsync(path));
+
+            Assert.Equal("Dịu dàng từng bước!", topic.Quote);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task RejectsEmptyOrMismatchedQuoteWithinTopic()
+    {
+        var emptyRows = CreateValidRows();
+        emptyRows[0] = "Animals,,Keyword 1,WORDAA";
+        var emptyPath = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", emptyRows);
+        var mismatchRows = CreateValidRows();
+        mismatchRows[1] = "Animals,A different quote,Keyword 2,WORDAB";
+        var mismatchPath = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", mismatchRows);
+
+        try
+        {
+            var empty = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                new CsvWordSearchInputReader().ReadAsync(emptyPath));
+            var mismatch = await Assert.ThrowsAsync<WordSearchGenerationException>(() =>
+                new CsvWordSearchInputReader().ReadAsync(mismatchPath));
+
+            Assert.Equal("quote_invalid", empty.Code);
+            Assert.Contains("CSV row 2, topic 'ANIMALS'", empty.Message, StringComparison.Ordinal);
+            Assert.Equal("quote_mismatch", mismatch.Code);
+            Assert.Contains("CSV row 3, topic 'ANIMALS'", mismatch.Message, StringComparison.Ordinal);
+            Assert.Contains("CSV row 2", mismatch.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(emptyPath);
+            File.Delete(mismatchPath);
+        }
+    }
+
+    [Fact]
     public async Task RejectsTopicWithFewerThanTwentyEntries()
     {
         var path = await WriteTemporaryCsvAsync(
-            "Topic,Keyword,Word Search Key",
-            ["Animals,Red Panda,RED PANDA"]);
+            "Topic,Quote,Keyword,Word Search Key",
+            ["Animals,Steady progress,Red Panda,RED PANDA"]);
 
         try
         {
@@ -112,8 +166,8 @@ public sealed class CsvWordSearchInputReaderTests
     public async Task RejectsDuplicateNormalizedWordSearchKey()
     {
         var rows = CreateValidRows();
-        rows[1] = "Animals,Duplicate,WORDAB";
-        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+        rows[1] = "Animals,Steady progress,Duplicate,WORDAB";
+        var path = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", rows);
 
         try
         {
@@ -132,8 +186,8 @@ public sealed class CsvWordSearchInputReaderTests
     public async Task UsesConfiguredMaximumKeywordLengthIgnoringWhitespace()
     {
         var rows = CreateValidRows();
-        rows[0] = "Animals,Too Long,WORDZZ";
-        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+        rows[0] = "Animals,Steady progress,Too Long,WORDZZ";
+        var path = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", rows);
 
         try
         {
@@ -161,8 +215,8 @@ public sealed class CsvWordSearchInputReaderTests
         string expectedMessage)
     {
         var rows = CreateValidRows();
-        rows[0] = $"Animals,Keyword 1,{wordSearchKey}";
-        var path = await WriteTemporaryCsvAsync("Topic,Keyword,Word Search Key", rows);
+        rows[0] = $"Animals,Steady progress,Keyword 1,{wordSearchKey}";
+        var path = await WriteTemporaryCsvAsync("Topic,Quote,Keyword,Word Search Key", rows);
 
         try
         {
@@ -180,7 +234,7 @@ public sealed class CsvWordSearchInputReaderTests
     }
 
     private static string[] CreateValidRows() => Enumerable.Range(1, 20)
-        .Select(index => $"Animals,Keyword {index},WORD{ToLetters(index)}")
+        .Select(index => $"Animals,Steady progress,Keyword {index},WORD{ToLetters(index)}")
         .ToArray();
 
     private static string ToLetters(int value)

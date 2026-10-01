@@ -12,7 +12,7 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
 {
     private const int RequiredEntriesPerTopic = 20;
     private const int MaximumWordLength = 20;
-    private static readonly string[] RequiredHeaders = ["TOPIC", "KEYWORD", "WORD SEARCH KEY"];
+    private static readonly string[] RequiredHeaders = ["TOPIC", "QUOTE", "KEYWORD", "WORD SEARCH KEY"];
 
     public async Task<IReadOnlyList<WordSearchTopic>> ReadAsync(
         string dataCsvPath,
@@ -51,6 +51,7 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
                 cancellationToken.ThrowIfCancellationRequested();
                 var sourceRow = csv.Context.Parser?.Row ?? 0;
                 var topicName = RequireUppercase(csv.GetField("Topic"), "Topic", sourceRow);
+                var quote = RequireQuote(csv.GetField("Quote"), sourceRow, topicName);
                 var keyword = RequireKeyword(csv.GetField("Keyword"), sourceRow, topicName);
                 var compactKeywordLength = keyword.Count(character => !char.IsWhiteSpace(character));
                 if (compactKeywordLength > maximumKeywordLength)
@@ -63,9 +64,16 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
 
                 if (!topicsByName.TryGetValue(topicName, out var builder))
                 {
-                    builder = new TopicBuilder(topicBuilders.Count + 1, topicName);
+                    builder = new TopicBuilder(topicBuilders.Count + 1, topicName, quote, sourceRow);
                     topicsByName.Add(topicName, builder);
                     topicBuilders.Add(builder);
+                }
+
+                if (!string.Equals(builder.Quote, quote, StringComparison.Ordinal))
+                {
+                    throw new WordSearchGenerationException(
+                        "quote_mismatch",
+                        $"CSV row {sourceRow}, topic '{topicName}': Quote '{quote}' does not match Quote '{builder.Quote}' from CSV row {builder.QuoteSourceRow}. Use the same Quote for all rows in a Topic.");
                 }
 
                 if (!builder.WordSearchKeys.Add(wordSearchKey))
@@ -94,7 +102,7 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
             }
 
             return topicBuilders
-                .Select(builder => new WordSearchTopic(builder.Index, builder.Name, builder.Entries.ToArray()))
+                .Select(builder => new WordSearchTopic(builder.Index, builder.Name, builder.Quote, builder.Entries.ToArray()))
                 .ToArray();
         }
         catch (WordSearchGenerationException)
@@ -161,6 +169,19 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
         return trimmed.ToUpperInvariant();
     }
 
+    private static string RequireQuote(string? value, int sourceRow, string topicName)
+    {
+        var normalized = QuoteText.Normalize(value);
+        if (normalized.Length == 0)
+        {
+            throw new WordSearchGenerationException(
+                "quote_invalid",
+                $"CSV row {sourceRow}, topic '{topicName}': Quote cannot be empty.");
+        }
+
+        return normalized;
+    }
+
     private static string NormalizeWordSearchKey(string? value, int sourceRow, string topicName)
     {
         var rawValue = value ?? string.Empty;
@@ -193,11 +214,15 @@ public sealed class CsvWordSearchInputReader : IWordSearchInputReader
         return normalized;
     }
 
-    private sealed class TopicBuilder(int index, string name)
+    private sealed class TopicBuilder(int index, string name, string quote, int quoteSourceRow)
     {
         public int Index { get; } = index;
 
         public string Name { get; } = name;
+
+        public string Quote { get; } = quote;
+
+        public int QuoteSourceRow { get; } = quoteSourceRow;
 
         public List<WordSearchEntry> Entries { get; } = [];
 

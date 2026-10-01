@@ -3,6 +3,7 @@ using WordSearchBook.Core.WordSearch.Validation;
 using WordSearchBook.Infrastructure.WordSearch.Settings;
 using WordSearchBook.Infrastructure.WordSearch.Validation;
 using WordSearchBook.Infrastructure.Workspace;
+using System.Text.Json.Nodes;
 
 namespace WordSearchBook.Infrastructure.Tests.Workspace;
 
@@ -50,7 +51,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
         {
             await File.WriteAllLinesAsync(
                 Path.Combine(root, "input", "sample-book", "data.csv"),
-                ["Topic,Keyword,Word Search Key", "Broken,Only One,ONLYONE"]);
+                ["Topic,Quote,Keyword,Word Search Key", "Broken,Keep going,Only One,ONLYONE"]);
             var dataValidation = CreateDataValidationService();
             await dataValidation.ValidateAsync(root, "sample-book");
             var service = new WordSearchWorkspaceSnapshotService(
@@ -66,6 +67,36 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
             Assert.Equal(1, book.TopicCount);
             Assert.Equal("topic_word_count_invalid", book.Issue!.Code);
             Assert.Single(snapshot.Brands);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExposesDefaultQuoteAndRequiresSaveForLegacyBrandSettings()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var settingsPath = Path.Combine(root, "brands", "demo", "settings.json");
+            var document = JsonNode.Parse(await File.ReadAllTextAsync(settingsPath))!.AsObject();
+            document.Remove("quote");
+            await File.WriteAllTextAsync(settingsPath, document.ToJsonString());
+            var service = new WordSearchWorkspaceSnapshotService(
+                CreateDataValidationService(),
+                new JsonWordSearchSettingsReader(),
+                CreateValidationService(),
+                new StubAssignmentStore(new Dictionary<string, string>()),
+                new JsonBookOutputSnapshotService());
+
+            var snapshot = await service.RefreshAsync(root);
+
+            var brand = Assert.Single(snapshot.Brands);
+            Assert.True(brand.SettingsRequireSave);
+            Assert.NotNull(brand.Settings);
+            Assert.Equal(300, brand.Settings.Quote.Rectangle.X);
         }
         finally
         {
