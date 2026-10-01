@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, BookBrandAssignmentWorker>(BackgroundTaskKind.BookBrandAssignmentSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, SettingsSaveWorker>(BackgroundTaskKind.SettingsSave);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BrandCreateWorker>(BackgroundTaskKind.BrandCreate);
-        services.AddKeyedSingleton<IBackgroundTaskWorker, BrandPageLayoutValidationWorker>(BackgroundTaskKind.BrandPageLayoutValidation);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, BrandValidationWorker>(BackgroundTaskKind.BrandValidation);
         services.AddKeyedSingleton<IBackgroundTaskWorker, BrandPagePreviewWorker>(BackgroundTaskKind.BrandPagePreview);
         return services;
     }

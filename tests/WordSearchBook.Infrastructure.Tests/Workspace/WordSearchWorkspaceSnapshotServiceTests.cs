@@ -25,7 +25,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
         var brand = Assert.Single(snapshot.Brands);
         Assert.Equal("demo", brand.Id);
         Assert.Null(brand.Issue);
-        Assert.Equal(BrandValidationStatus.NotValidated, brand.LayoutValidation.Status);
+        Assert.Equal(BrandValidationStatus.NotValidated, brand.Validation.Status);
         var book = Assert.Single(snapshot.Books);
         Assert.Equal("sample-book", book.Id);
         Assert.Equal(1, book.TopicCount);
@@ -62,6 +62,52 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
     }
 
     [Fact]
+    public async Task ListsOnlyTopLevelSupportedBrandImagesInStableFolderOrder()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            var brand = Path.Combine(root, "brands", "demo");
+            var front = Path.Combine(brand, "front");
+            var nested = Path.Combine(front, "nested");
+            Directory.CreateDirectory(nested);
+            Directory.CreateDirectory(Path.Combine(brand, "back"));
+            await File.WriteAllTextAsync(Path.Combine(front, "B.JPG"), "metadata only");
+            await File.WriteAllTextAsync(Path.Combine(front, "a.png"), "metadata only");
+            await File.WriteAllTextAsync(Path.Combine(front, "ignored.txt"), "ignored");
+            await File.WriteAllTextAsync(Path.Combine(nested, "nested.png"), "ignored");
+            var service = new WordSearchWorkspaceSnapshotService(
+                new CsvWordSearchInputReader(),
+                new JsonWordSearchSettingsReader(),
+                CreateValidationService(),
+                new StubAssignmentStore(new Dictionary<string, string>()));
+
+            var snapshot = await service.RefreshAsync(root);
+
+            var folders = Assert.Single(snapshot.Brands).AssetFolders;
+            Assert.Collection(
+                folders,
+                folder =>
+                {
+                    Assert.Equal("front", folder.Key);
+                    Assert.True(folder.Exists);
+                    Assert.Equal(["a.png", "B.JPG"], folder.Files.Select(file => file.Name));
+                    Assert.All(folder.Files, file => Assert.Equal(BrandValidationStatus.NotValidated, file.Status));
+                },
+                folder =>
+                {
+                    Assert.Equal("back", folder.Key);
+                    Assert.True(folder.Exists);
+                    Assert.Empty(folder.Files);
+                });
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task CreatesDefaultGlobalSettingsWhenWorkspaceSettingsAreMissing()
     {
         var root = CopyFixtureToTemporaryRoot();
@@ -89,7 +135,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
     }
 
     [Fact]
-    public async Task KeepsLayoutValidationVisibleWhenGlobalSettingsAreInvalid()
+    public async Task KeepsBrandValidationVisibleWhenGlobalSettingsAreInvalid()
     {
         var root = CopyFixtureToTemporaryRoot();
         try
@@ -105,7 +151,7 @@ public sealed class WordSearchWorkspaceSnapshotServiceTests
 
             Assert.NotNull(snapshot.GlobalSettingsIssue);
             var brand = Assert.Single(snapshot.Brands);
-            Assert.Equal(BrandValidationStatus.NotValidated, brand.LayoutValidation.Status);
+            Assert.Equal(BrandValidationStatus.NotValidated, brand.Validation.Status);
             Assert.NotNull(brand.Issue);
         }
         finally

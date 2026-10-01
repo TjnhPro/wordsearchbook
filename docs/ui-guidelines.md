@@ -15,17 +15,19 @@
 - Use a `3/9` master-detail grid: Brand List takes 25% on the left and Brand Detail takes 75% on the right.
 - Keep the search box fixed above the Brand List. The list owns its vertical scrollbar and must not increase the page height.
 - Filter brand names case-insensitively after a `250ms` debounce. Update only the list rows; never replace the complete route while the user is typing.
-- Use one two-column panel grid in this order: Page layout/Page layout preview, Topic/Page number, then Keyword list/Board game. Keep every panel background white.
+- Use one two-column panel grid in this order: Page layout/Page layout preview, Topic/Page number, Keyword list/Board game, then Front/Back. Keep every panel background white.
 - Keep Answer styling inside the Board game panel below its placement and font settings.
 - Show the output page as fixed `2588x3375`; do not expose editable page width or height controls.
 - Each brand owns `brands/{brand}/page_layout.png`. It must be a PNG exactly `2588x3375`; Create Brand also creates a white default layout.
 - Creating a valid default PNG does not certify it. Show `Not validated`, `Validated`, or `Needs validation` separately from settings health.
-- Deep PNG validation runs only when the user selects **Validate layout**. Workspace load and refresh may read `brand.validation.json` and file metadata but must not decode the PNG.
+- Create Brand also creates empty `front/` and `back/` folders. Existing Brands may omit either folder; missing and empty folders are valid optional states.
+- Front and Back panels list only direct `.png`, `.jpg`, or `.jpeg` files, use their own bounded list scroll, and show per-file certificate/failure status. Nested and unsupported files remain invisible.
+- Deep image validation runs only when the user selects **Validate brand**. Workspace load and refresh may enumerate tracked files, read `brand.validation.json` and compare metadata, but must not decode images.
 - Keep the Page Layout card visible even when Brand or global settings are invalid. Disable validation while the current Brand form is dirty or saving.
 - Keep a **Page layout preview** panel inside the Page Layout card. **Draw demo** uses only saved settings and writes `page_layout.preview.png` beside the source layout through the background queue.
 - Disable **Draw demo** while the selected Brand has unsaved edits, is saving, or already has an active preview task. **Open folder** remains available and must use the desktop-derived Brand path rather than a path supplied by the frontend.
 - Preview generation is independent from the validation certificate and must never modify `page_layout.png` or `brand.validation.json`.
-- Books may list any Brand with readable settings, but **Generate pages** stays disabled until that Brand's layout state is `Validated`.
+- Books may list any Brand with readable settings, but **Generate pages** stays disabled until the shared Brand certificate for page layout and optional Front/Back assets is `Validated`.
 - Topic and Page number editors use X/Y anchors plus `Left`, `Center`, or `Right` alignment. X is the selected horizontal anchor; Y is always the text top edge.
 - Board game remains a rectangle editor because the pre-rendered board is placed at its X/Y without scaling.
 - Keyword list exposes four independent X anchors, one shared Column Y, and one shared vertical step. Arrange the two-column form as X1/X2, X3/X4, Column Y/Vertical step, Alignment/Font, then Font size/Font color. The 20 keywords fill column-major with five rows per column; alignment applies to every keyword.

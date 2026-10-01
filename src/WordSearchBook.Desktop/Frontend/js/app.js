@@ -26,9 +26,9 @@ function brandValidationPresentation(validation) {
   if (status === "NeedsValidation") return { label: "Needs validation", tone: "warn" };
   return { label: "Not validated", tone: "neutral" };
 }
-function canGenerateWithBrand(brand) { return brand?.layoutValidation?.status === "Validated"; }
+function canGenerateWithBrand(brand) { return brand?.validation?.status === "Validated"; }
 function isBrandValidationActive(brandId) {
-  return state.tasks.some(task => task.kind === "BrandPageLayoutValidation" && task.subject === brandId && activeTaskStates.has(task.state));
+  return state.tasks.some(task => task.kind === "BrandValidation" && task.subject === brandId && activeTaskStates.has(task.state));
 }
 function isBrandPreviewActive(brandId) {
   return state.tasks.some(task => task.kind === "BrandPagePreview" && task.subject === brandId && activeTaskStates.has(task.state));
@@ -156,31 +156,62 @@ function keywordListEditor(region) {
 function brandRowsMarkup(brands, selectedBrandId) {
   if (!brands.length) return `<div class="brand-list-empty"><strong>No matching brands</strong><p>Try a different brand name.</p></div>`;
   return brands.map(brand => {
-    const validation = brandValidationPresentation(brand.layoutValidation);
+    const validation = brandValidationPresentation(brand.validation);
     return `<button class="brand-row ${brand.id === selectedBrandId ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-id="${escapeHtml(brand.id)}"><span><strong>${escapeHtml(brand.id)}</strong><small>${brand.settings ? "Settings ready" : "Settings need attention"}</small></span><span class="brand-row-badges">${brand.settings ? badge("Settings", "good") : badge("Settings", "bad")}${badge(validation.label, validation.tone)}</span></button>`;
   }).join("");
 }
 
 function brandLayoutPanels(brand) {
-  const validation = brand.layoutValidation ?? { status: "NotValidated" };
+  const validation = brand.validation ?? { status: "NotValidated" };
   const presentation = brandValidationPresentation(validation);
   const active = isBrandValidationActive(brand.id);
   const previewActive = isBrandPreviewActive(brand.id);
   const guarded = state.brandDirty || state.brandSaving;
   const feedback = state.brandValidationFeedback?.brandId === brand.id ? state.brandValidationFeedback.failures ?? [] : [];
   const failures = feedback.length
-    ? `<ul class="layout-validation-failures">${feedback.map(failure => `<li>${escapeHtml(failure.message)}</li>`).join("")}</ul>`
+    ? `<ul class="brand-validation-failures">${feedback.map(failure => `<li>${escapeHtml(failure.message)}</li>`).join("")}</ul>`
     : "";
   const reason = !feedback.length && validation.reasonCode
-    ? `<p class="layout-validation-reason">${escapeHtml(validation.reasonCode)}</p>`
+    ? `<p class="brand-validation-reason">${escapeHtml(validation.reasonCode)}</p>`
     : "";
   const validatedAt = validation.validatedAtUtc ? new Date(validation.validatedAtUtc).toLocaleString() : "Never";
   const guardMessage = guarded ? "Save or discard settings changes before validating or drawing a demo." : "";
   const previewFeedback = state.brandPreviewFeedback?.brandId === brand.id ? state.brandPreviewFeedback : null;
   const previewFeedbackMarkup = `<p class="page-preview-feedback ${previewFeedback ? "" : "hidden"}" data-brand-preview-feedback data-state="${escapeHtml(previewFeedback?.tone ?? "neutral")}" role="status">${escapeHtml(previewFeedback?.message ?? "")}</p>`;
-  const layoutPanel = `<fieldset class="settings-group brand-region-card page-layout-card"><legend>Page layout</legend><div class="page-layout-card-heading"><strong>page_layout.png</strong>${badge(presentation.label, presentation.tone)}</div><dl class="page-layout-facts"><div><dt>Required size</dt><dd>2588 × 3375 px</dd></div><div><dt>Last validated</dt><dd>${escapeHtml(validatedAt)}</dd></div><div><dt>Fingerprint</dt><dd title="${escapeHtml(validation.fingerprint ?? "")}">${escapeHtml(shortFingerprint(validation.fingerprint))}</dd></div></dl>${reason}${failures}<div class="page-layout-actions"><button class="button-secondary" type="button" data-action="validate-brand-layout" data-brand-id="${escapeHtml(brand.id)}" data-brand-validation-button ${active || guarded ? "disabled" : ""}>${active ? "Validating…" : "Validate layout"}</button><span data-brand-validation-guard>${escapeHtml(guardMessage)}</span></div></fieldset>`;
+  const layoutPanel = `<fieldset class="settings-group brand-region-card page-layout-card"><legend>Page layout</legend><div class="page-layout-card-heading"><strong>page_layout.png</strong>${badge(presentation.label, presentation.tone)}</div><dl class="page-layout-facts"><div><dt>Required size</dt><dd>2588 × 3375 px</dd></div><div><dt>Last validated</dt><dd>${escapeHtml(validatedAt)}</dd></div><div><dt>Fingerprint</dt><dd title="${escapeHtml(validation.fingerprint ?? "")}">${escapeHtml(shortFingerprint(validation.fingerprint))}</dd></div></dl>${reason}${failures}<div class="page-layout-actions"><button class="button-secondary" type="button" data-action="validate-brand" data-brand-id="${escapeHtml(brand.id)}" data-brand-validation-button ${active || guarded ? "disabled" : ""}>${active ? "Validating…" : "Validate brand"}</button><span data-brand-validation-guard>${escapeHtml(guardMessage)}</span></div></fieldset>`;
   const previewPanel = `<fieldset class="settings-group brand-region-card page-preview-panel"><legend>Page layout preview</legend><p>Draws a fixed 20-word sample with the saved brand settings.</p><code>page_layout.preview.png</code><div class="page-preview-actions"><button class="button-primary" type="button" data-action="draw-brand-preview" data-brand-id="${escapeHtml(brand.id)}" data-brand-preview-button ${brandPreviewActionDisabled(state.brandDirty, state.brandSaving, previewActive) ? "disabled" : ""}>${previewActive ? "Drawing…" : "Draw demo"}</button><button class="button-secondary" type="button" data-action="open-brand-folder" data-brand-id="${escapeHtml(brand.id)}">Open folder</button></div>${previewFeedbackMarkup}</fieldset>`;
   return `${layoutPanel}${previewPanel}`;
+}
+
+function brandAssetFolderMarkup(folder, failures = []) {
+  const files = folder?.files ?? [];
+  const folderName = folder?.key === "back" ? "Back" : "Front";
+  const relativePath = folder?.relativePath ?? folderName.toLocaleLowerCase();
+  const failureByTarget = new Map(failures.map(failure => [String(failure.target ?? "").toLocaleLowerCase(), failure]));
+  const rows = files.map(file => {
+    const failure = failureByTarget.get(String(file.relativePath ?? "").toLocaleLowerCase());
+    const presentation = failure
+      ? { label: "Invalid", tone: "bad" }
+      : brandValidationPresentation({ status: file.status });
+    const detail = failure ? `<p>${escapeHtml(failure.message)}</p>` : "";
+    return `<li class="brand-asset-row"><div><strong title="${escapeHtml(file.relativePath)}">${escapeHtml(file.name)}</strong><span>${escapeHtml(String(file.extension ?? "").replace(/^\./u, "").toLocaleUpperCase())}</span></div>${badge(presentation.label, presentation.tone)}${detail}</li>`;
+  }).join("");
+  const emptyMessage = folder?.exists === false ? "Folder not found — optional" : "No images — optional";
+  const content = rows
+    ? `<ul class="brand-asset-list">${rows}</ul>`
+    : `<div class="brand-asset-empty"><strong>${emptyMessage}</strong><p>Add a PNG or JPG when this Brand needs a ${folderName.toLocaleLowerCase()} page.</p></div>`;
+  return `<fieldset class="settings-group brand-region-card brand-asset-card"><legend>${folderName}</legend><div class="brand-asset-heading"><div><code>${escapeHtml(relativePath)}/</code><p>PNG/JPG · 2588 × 3375 px</p></div><div>${badge("Optional")}${badge(`${files.length} image${files.length === 1 ? "" : "s"}`, files.length ? "good" : "neutral")}</div></div>${content}</fieldset>`;
+}
+
+function brandAssetPanels(brand) {
+  const folders = brand.assetFolders ?? [];
+  const failures = state.brandValidationFeedback?.brandId === brand.id
+    ? state.brandValidationFeedback.failures ?? []
+    : [];
+  const folderByKey = new Map(folders.map(folder => [folder.key, folder]));
+  return ["front", "back"]
+    .map(key => brandAssetFolderMarkup(folderByKey.get(key) ?? { key, relativePath: key, exists: false, files: [] }, failures))
+    .join("");
 }
 
 function renderBrands() {
@@ -200,10 +231,10 @@ function renderBrands() {
   const rows = brandRowsMarkup(filteredBrands, selected.id);
   const list = `<section class="panel brand-list-panel"><div class="brand-panel-header"><div><h3>Brands</h3><p data-brand-result-count>${filteredBrands.length} of ${brands.length} shown</p></div><button class="button-secondary" type="button" data-action="open-create-brand">Create brand</button></div><label class="brand-search"><span class="sr-only">Search brands by name</span><input type="search" data-action="search-brands" value="${escapeHtml(state.brandSearchQuery)}" placeholder="Search brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${rows}</div></section>`;
   if (!selected.settings) {
-    return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Settings invalid", "bad")}</div><div class="brand-detail-scroll"><div class="brand-region-grid">${brandLayoutPanels(selected)}</div>${issueMarkup(selected.issue)}</div></section></div>`;
+    return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Settings invalid", "bad")}</div><div class="brand-detail-scroll"><div class="brand-region-grid">${brandLayoutPanels(selected)}${brandAssetPanels(selected)}</div>${issueMarkup(selected.issue)}</div></section></div>`;
   }
   const settings = selected.settings;
-  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="saved">All changes saved</span><button class="button-primary" data-brand-save-button type="submit" disabled>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${brandLayoutPanels(selected)}${anchoredTextEditor("topic", "Topic", settings.topic)}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}${keywordListEditor(settings.keywordList)}${boardGameEditor(settings.boardGame, settings.answerLine)}</div></div></form>`;
+  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="saved">All changes saved</span><button class="button-primary" data-brand-save-button type="submit" disabled>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${brandLayoutPanels(selected)}${anchoredTextEditor("topic", "Topic", settings.topic)}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}${keywordListEditor(settings.keywordList)}${boardGameEditor(settings.boardGame, settings.answerLine)}${brandAssetPanels(selected)}</div></div></form>`;
   return `<div class="brand-workspace">${list}${detail}</div>`;
 }
 
@@ -340,7 +371,7 @@ function refreshBrandFormState(documentRoot) {
   const previewActive = isBrandPreviewActive(state.selectedBrandId);
   if (validationButton) {
     validationButton.disabled = validationActive || state.brandDirty || state.brandSaving;
-    validationButton.textContent = validationActive ? "Validating…" : "Validate layout";
+    validationButton.textContent = validationActive ? "Validating…" : "Validate brand";
   }
   if (validationGuard) {
     validationGuard.textContent = state.brandDirty || state.brandSaving
@@ -566,15 +597,15 @@ function initializeWorkspace(documentRoot, render) {
     if (target.dataset.action === "refresh") start("workspace.refresh");
     if (target.dataset.action === "list-tasks") listTasks();
     if (target.dataset.action === "generate") start("book.generate", { bookId: target.dataset.bookId, brandId: target.dataset.brandId });
-    if (target.dataset.action === "validate-brand-layout" && !state.brandDirty && !state.brandSaving) {
+    if (target.dataset.action === "validate-brand" && !state.brandDirty && !state.brandSaving) {
       const brandId = target.dataset.brandId;
       state.brandValidationFeedback = null;
-      start("brand.layout.validate", { brandId }, {
+      start("brand.validate", { brandId }, {
         onStarted: () => renderCurrentRoute(),
         onRejected: error => {
           state.brandValidationFeedback = {
             brandId,
-            failures: [{ message: error?.message ?? "Page layout validation could not be started." }]
+            failures: [{ message: error?.message ?? "Brand validation could not be started." }]
           };
           renderCurrentRoute();
         },
@@ -584,7 +615,7 @@ function initializeWorkspace(documentRoot, render) {
             brandId,
             failures: task.state === "Completed"
               ? failures
-              : [{ message: task.errorMessage || `Page layout validation was ${String(task.state).toLocaleLowerCase()}.` }]
+              : [{ message: task.errorMessage || `Brand validation was ${String(task.state).toLocaleLowerCase()}.` }]
           };
           renderCurrentRoute();
         }
@@ -685,6 +716,6 @@ function initialize() {
 }
 
 if (typeof document !== "undefined") initialize();
-const api = { activateRoute, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
+const api = { activateRoute, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createBridgeClient, createDebouncedAction, filterBrands, globalSettingsValue, hasBrandSettingsChanged, initializeNavigation, shouldRenderForTaskUpdate, validateBrandFolderName };
 globalThis.WordSearchBookUi = api;
 if (typeof module !== "undefined" && module.exports) module.exports = api;

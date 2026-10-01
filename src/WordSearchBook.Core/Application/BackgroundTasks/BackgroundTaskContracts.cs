@@ -24,7 +24,7 @@ public enum BackgroundTaskKind
     SettingsSave,
     BookBrandAssignmentSave,
     BrandCreate,
-    BrandPageLayoutValidation,
+    BrandValidation,
     BrandPagePreview
 }
 

@@ -5,13 +5,29 @@ namespace WordSearchBook.Core.Tests.WordSearch;
 public sealed class BrandValidationDefinitionTests
 {
     [Fact]
-    public void SignatureIsDeterministicRegardlessOfRuleOrdering()
+    public void SignatureIsDeterministicRegardlessOfEntryOrdering()
     {
-        var forward = BrandValidationDefinition.CalculateSignature(BrandValidationDefinition.Rules);
-        var reverse = BrandValidationDefinition.CalculateSignature(BrandValidationDefinition.Rules.Reverse());
+        var forward = BrandValidationDefinition.CalculateSignature(BrandValidationDefinition.Entries);
+        var reverse = BrandValidationDefinition.CalculateSignature(BrandValidationDefinition.Entries.Reverse());
 
         Assert.Equal(forward, reverse);
         Assert.StartsWith("sha256:", forward, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefinitionTracksRequiredLayoutAndOptionalImageFolders()
+    {
+        Assert.Collection(
+            BrandValidationDefinition.Entries,
+            pageLayout =>
+            {
+                Assert.Equal(BrandValidationDefinition.PageLayoutKey, pageLayout.Key);
+                Assert.Equal(BrandValidationTargetKind.File, pageLayout.TargetKind);
+                Assert.True(pageLayout.Required);
+                Assert.Equal([".png"], pageLayout.Extensions);
+            },
+            front => AssertOptionalImageFolder(front, BrandValidationDefinition.FrontKey),
+            back => AssertOptionalImageFolder(back, BrandValidationDefinition.BackKey));
     }
 
     [Fact]
@@ -39,6 +55,15 @@ public sealed class BrandValidationDefinitionTests
     public void RelativePathNormalizationRejectsUnsafePaths(string path)
     {
         Assert.Throws<ArgumentException>(() => BrandValidationDefinition.NormalizeRelativePath(path));
+    }
+
+    private static void AssertOptionalImageFolder(BrandValidationEntryDefinition entry, string expectedKey)
+    {
+        Assert.Equal(expectedKey, entry.Key);
+        Assert.Equal(BrandValidationTargetKind.Directory, entry.TargetKind);
+        Assert.False(entry.Required);
+        Assert.False(entry.Recursive);
+        Assert.Equal([".jpeg", ".jpg", ".png"], entry.Extensions);
     }
 }
 

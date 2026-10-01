@@ -71,7 +71,11 @@ public sealed class BrandValidationServiceTests
         var root = CreateRoot();
         try
         {
-            var record = CurrentRecord("ignored") with { SchemaVersion = 0 };
+            var record = CurrentRecord("ignored") with
+            {
+                SchemaVersion = 1,
+                AssetFingerprintFormatVersion = 1
+            };
             await new JsonBrandValidationStateStore().SaveAsync(root, "demo", record);
 
             var state = await CreateService().CheckStateAsync(root, "demo");
@@ -104,6 +108,149 @@ public sealed class BrandValidationServiceTests
                 Assert.Equal(2588, asset.Width);
                 Assert.Equal(3375, asset.Height);
             });
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ValidatesOptionalFrontAndBackImagesWhenPresent()
+    {
+        var root = CreateRoot();
+        try
+        {
+            SaveImage(LayoutPath(root), BrandValidationDefinition.PageWidth, BrandValidationDefinition.PageHeight, ImageFormat.Png);
+            var front = Path.Combine(root, "brands", "demo", "front");
+            var back = Path.Combine(root, "brands", "demo", "back");
+            Directory.CreateDirectory(front);
+            Directory.CreateDirectory(back);
+            SaveImage(Path.Combine(front, "opening.PNG"), 2588, 3375, ImageFormat.Png);
+            SaveImage(Path.Combine(back, "closing.JPG"), 2588, 3375, ImageFormat.Jpeg);
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(
+                ["page_layout.png", "front/opening.png", "back/closing.jpg"],
+                result.State.ValidatedAssets!.Select(asset => asset.RelativePath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidOptionalImageReturnsFailureForItsRelativePath()
+    {
+        var root = CreateRoot();
+        try
+        {
+            SaveImage(LayoutPath(root), 2588, 3375, ImageFormat.Png);
+            var front = Path.Combine(root, "brands", "demo", "front");
+            Directory.CreateDirectory(front);
+            SaveImage(Path.Combine(front, "wrong.png"), 100, 100, ImageFormat.Png);
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            var failure = Assert.Single(result.Failures, item => item.Code == "brand_asset_dimensions_invalid");
+            Assert.Equal("front/wrong.png", failure.Target);
+            Assert.Equal(BrandValidationStatus.NotValidated, result.State.Status);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CorruptOptionalImageReturnsReadableFailureForItsRelativePath()
+    {
+        var root = CreateRoot();
+        try
+        {
+            SaveImage(LayoutPath(root), 2588, 3375, ImageFormat.Png);
+            var front = Path.Combine(root, "brands", "demo", "front");
+            Directory.CreateDirectory(front);
+            await File.WriteAllTextAsync(Path.Combine(front, "broken.jpg"), "not an image");
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            var failure = Assert.Single(result.Failures, item => item.Code == "brand_asset_invalid");
+            Assert.Equal("front/broken.jpg", failure.Target);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("delete")]
+    [InlineData("rename")]
+    [InlineData("modify")]
+    public async Task TrackedImageMetadataChangesInvalidateCertificateWithoutDecoding(string change)
+    {
+        var root = CreateRoot();
+        try
+        {
+            await File.WriteAllTextAsync(LayoutPath(root), "layout metadata");
+            var front = Path.Combine(root, "brands", "demo", "front");
+            Directory.CreateDirectory(front);
+            var imagePath = Path.Combine(front, "tracked.png");
+            await File.WriteAllTextAsync(imagePath, "image metadata");
+            var fingerprint = BrandValidationService.CaptureFingerprint(root, "demo");
+            var record = CurrentRecord(fingerprint) with
+            {
+                Assets =
+                [
+                    new BrandValidationAssetFact("page_layout.png", 2588, 3375),
+                    new BrandValidationAssetFact("front/tracked.png", 2588, 3375)
+                ]
+            };
+            await new JsonBrandValidationStateStore().SaveAsync(root, "demo", record);
+            var service = CreateService();
+            Assert.Equal(BrandValidationStatus.Validated, (await service.CheckStateAsync(root, "demo")).Status);
+
+            if (change == "delete") File.Delete(imagePath);
+            if (change == "rename") File.Move(imagePath, Path.Combine(front, "renamed.png"));
+            if (change == "modify") await File.AppendAllTextAsync(imagePath, " changed");
+
+            var state = await service.CheckStateAsync(root, "demo");
+            Assert.Equal(BrandValidationStatus.NeedsValidation, state.Status);
+            Assert.Equal("brand_fingerprint_changed", state.ReasonCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task IgnoresUnsupportedAndNestedFilesButTracksTopLevelImages()
+    {
+        var root = CreateRoot();
+        try
+        {
+            SaveImage(LayoutPath(root), 2588, 3375, ImageFormat.Png);
+            var front = Path.Combine(root, "brands", "demo", "front");
+            var nested = Path.Combine(front, "nested");
+            Directory.CreateDirectory(nested);
+            await File.WriteAllTextAsync(Path.Combine(front, "notes.txt"), "ignored");
+            SaveImage(Path.Combine(nested, "nested.png"), 100, 100, ImageFormat.Png);
+            var service = CreateService();
+
+            Assert.True((await service.ValidateAsync(root, "demo")).IsSuccess);
+            await File.AppendAllTextAsync(Path.Combine(front, "notes.txt"), " changed");
+            SaveImage(Path.Combine(nested, "another.jpg"), 100, 100, ImageFormat.Jpeg);
+            Assert.Equal(BrandValidationStatus.Validated, (await service.CheckStateAsync(root, "demo")).Status);
+
+            SaveImage(Path.Combine(front, "tracked.png"), 2588, 3375, ImageFormat.Png);
+            var changed = await service.CheckStateAsync(root, "demo");
+            Assert.Equal(BrandValidationStatus.NeedsValidation, changed.Status);
+            Assert.Equal("brand_fingerprint_changed", changed.ReasonCode);
         }
         finally
         {
