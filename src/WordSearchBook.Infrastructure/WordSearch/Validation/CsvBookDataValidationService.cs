@@ -225,7 +225,12 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
 
                 if (string.IsNullOrWhiteSpace(keyword))
                 {
-                    AddTopicFailure(failures, builder, "keyword_invalid", $"CSV row {sourceRow}: Keyword cannot be empty.", sourceRow);
+                    AddTopicFailure(
+                        failures,
+                        builder,
+                        "keyword_invalid",
+                        "Keyword is empty. Enter the text to display on the page.",
+                        sourceRow);
                 }
                 else
                 {
@@ -236,20 +241,29 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
                             failures,
                             builder,
                             "keyword_too_long",
-                            $"CSV row {sourceRow}: Keyword '{keyword}' exceeds {maximumKeywordLength} characters when whitespace is ignored.",
+                            $"Keyword '{keyword}' has {compactKeywordLength} characters excluding spaces; the maximum is {maximumKeywordLength}. Shorten the Keyword or change Max Keyword characters in Global Settings.",
                             sourceRow);
                     }
                 }
 
                 var normalizedKey = new string(rawKey.Where(character => !char.IsWhiteSpace(character)).ToArray())
                     .ToUpperInvariant();
-                if (normalizedKey.Length == 0 || normalizedKey.Any(character => character is < 'A' or > 'Z'))
+                if (normalizedKey.Length == 0)
                 {
                     AddTopicFailure(
                         failures,
                         builder,
                         "word_invalid",
-                        $"CSV row {sourceRow}: Word Search Key must contain only letters A-Z after whitespace is removed.",
+                        "Word Search Key is empty. Enter letters A-Z.",
+                        sourceRow);
+                }
+                else if (normalizedKey.Any(character => character is < 'A' or > 'Z'))
+                {
+                    AddTopicFailure(
+                        failures,
+                        builder,
+                        "word_invalid",
+                        $"Word Search Key '{rawKey.Trim()}' contains unsupported characters. Use letters A-Z only; spaces are removed automatically.",
                         sourceRow);
                 }
                 else if (normalizedKey.Length > MaximumWordSearchKeyLength)
@@ -258,7 +272,7 @@ public sealed class CsvBookDataValidationService(IBookDataValidationStateStore s
                         failures,
                         builder,
                         "word_too_long",
-                        $"CSV row {sourceRow}: Word Search Key '{normalizedKey}' exceeds {MaximumWordSearchKeyLength} letters.",
+                        $"Word Search Key '{normalizedKey}' has {normalizedKey.Length} letters; the maximum is {MaximumWordSearchKeyLength}. Shorten the Word Search Key.",
                         sourceRow);
                 }
                 else if (builder is not null && !builder.WordSearchKeys.Add(normalizedKey))

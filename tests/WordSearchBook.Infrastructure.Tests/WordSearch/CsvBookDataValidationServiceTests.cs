@@ -94,11 +94,53 @@ public sealed class CsvBookDataValidationServiceTests
 
             Assert.False(result.IsSuccess);
             Assert.Equal(BookDataValidationStatus.Invalid, state.Status);
-            Assert.Contains(result.Failures, failure => failure.Code == "keyword_too_long" && failure.SourceRow == 2);
-            Assert.Contains(result.Failures, failure => failure.Code == "keyword_invalid" && failure.SourceRow == 3);
+            var longKeyword = Assert.Single(result.Failures, failure => failure.Code == "keyword_too_long");
+            Assert.Equal(2, longKeyword.SourceRow);
+            Assert.Equal("ANIMALS", longKeyword.Topic);
+            Assert.Contains("has 24 characters excluding spaces; the maximum is 13", longKeyword.Message, StringComparison.Ordinal);
+            Assert.Contains("change Max Keyword characters in Global Settings", longKeyword.Message, StringComparison.Ordinal);
+            var emptyKeyword = Assert.Single(result.Failures, failure => failure.Code == "keyword_invalid");
+            Assert.Equal(3, emptyKeyword.SourceRow);
+            Assert.Equal("Keyword is empty. Enter the text to display on the page.", emptyKeyword.Message);
             Assert.Contains(result.Failures, failure => failure.Code == "duplicate_word");
             Assert.Contains(result.Failures, failure => failure.Code == "topic_word_count_invalid");
             Assert.False(Assert.Single(state.Topics!).IsValid);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReportsActionableWordSearchKeyValidationFailures()
+    {
+        var root = CopyFixtureToTemporaryRoot();
+        try
+        {
+            await File.WriteAllLinesAsync(
+                Path.Combine(root, "input", "sample-book", "data.csv"),
+                [
+                    "Topic,Keyword,Word Search Key",
+                    "Animals,Missing Key,",
+                    "Animals,Invalid Key,BAD-KEY",
+                    "Animals,Long Key,ABCDEFGHIJKLMNOPQRSTU"
+                ]);
+
+            var result = await CreateService().ValidateAsync(root, "sample-book");
+
+            Assert.Contains(result.Failures, failure =>
+                failure.Code == "word_invalid" &&
+                failure.SourceRow == 2 &&
+                failure.Message == "Word Search Key is empty. Enter letters A-Z.");
+            Assert.Contains(result.Failures, failure =>
+                failure.Code == "word_invalid" &&
+                failure.SourceRow == 3 &&
+                failure.Message.Contains("contains unsupported characters", StringComparison.Ordinal));
+            Assert.Contains(result.Failures, failure =>
+                failure.Code == "word_too_long" &&
+                failure.SourceRow == 4 &&
+                failure.Message.Contains("has 21 letters; the maximum is 20", StringComparison.Ordinal));
         }
         finally
         {

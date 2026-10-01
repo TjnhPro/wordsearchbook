@@ -26,12 +26,17 @@ public sealed class WordSearchPuzzleGenerator : IWordSearchPuzzleGenerator
         var words = wordSearchKeys.ToArray();
         if (words.Any(string.IsNullOrWhiteSpace))
         {
-            throw new WordSearchGenerationException("word_invalid", "Word search keys cannot be empty.");
+            throw new WordSearchGenerationException(
+                "word_invalid",
+                "Word Search Key is empty. Enter letters A-Z.");
         }
 
-        if (words.Any(word => word.Length > Math.Min(boardSize.Width, boardSize.Height)))
+        var maximumLength = Math.Min(boardSize.Width, boardSize.Height);
+        if (words.FirstOrDefault(word => word.Length > maximumLength) is { } oversizedWord)
         {
-            throw new WordSearchGenerationException("word_too_long", "A word search key is longer than the shortest board dimension.");
+            throw new WordSearchGenerationException(
+                "word_too_long",
+                $"Word Search Key '{oversizedWord}' has {oversizedWord.Length} letters; the maximum is {maximumLength}. Shorten the Word Search Key.");
         }
 
         Exception? lastException = null;
