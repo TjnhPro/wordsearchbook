@@ -98,6 +98,7 @@ test("activates sidebar routes and renders their detail shell", () => {
   assert.equal(route, "tasks");
   assert.equal(titleElement.textContent, "Tasks");
   assert.match(contentElement.innerHTML, /Background tasks/);
+  assert.match(contentElement.innerHTML, /route-page route-page-fill/);
   assert.deepEqual(navigationItems.map(item => item.active), [false, false, true, false]);
 });
 

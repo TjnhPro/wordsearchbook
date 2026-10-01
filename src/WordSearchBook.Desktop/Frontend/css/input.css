@@ -126,6 +126,10 @@
   .preview-placeholder strong { @apply text-sm text-slate-700; }
   .preview-placeholder p { @apply mt-1 text-xs text-slate-500; }
   .table-scroll { @apply mt-4 overflow-auto; }
+  .task-history-panel { @apply flex h-full min-h-0 flex-col overflow-hidden; }
+  .task-history-panel .panel-header { @apply shrink-0; }
+  .task-history-scroll { @apply min-h-0 flex-1; }
+  .task-history-scroll thead { @apply sticky top-0 z-10 bg-white; }
   table { @apply w-full border-collapse text-left text-xs; }
   th { @apply border-b border-slate-200 px-3 py-2 font-bold uppercase tracking-wide text-slate-400; }
   td { @apply border-b border-slate-100 px-3 py-3 text-slate-600; }
