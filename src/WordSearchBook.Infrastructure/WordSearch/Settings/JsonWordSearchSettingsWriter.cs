@@ -49,7 +49,8 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
 
             Directory.CreateDirectory(staging);
             await WriteAtomicallyAsync(Path.Combine(staging, "settings.json"), settings, cancellationToken);
-            WriteDefaultPageLayout(Path.Combine(staging, "page_layout.png"));
+            WriteDefaultLayout(Path.Combine(staging, BrandValidationDefinition.PageLayoutRelativePath), Color.White);
+            WriteDefaultLayout(Path.Combine(staging, BrandValidationDefinition.FrontLayoutRelativePath), Color.Transparent);
             Directory.CreateDirectory(Path.Combine(staging, BrandValidationDefinition.FrontRelativePath));
             Directory.CreateDirectory(Path.Combine(staging, BrandValidationDefinition.BackRelativePath));
             try
@@ -89,7 +90,7 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
         }
     }
 
-    private static void WriteDefaultPageLayout(string path)
+    private static void WriteDefaultLayout(string path, Color background)
     {
         using var bitmap = new Bitmap(
             WordSearchSettingsDefaults.PageWidth,
@@ -98,7 +99,7 @@ public sealed class JsonWordSearchSettingsWriter(IWordSearchSettingsReader setti
         bitmap.SetResolution(300, 300);
         using (var graphics = Graphics.FromImage(bitmap))
         {
-            graphics.Clear(Color.White);
+            graphics.Clear(background);
         }
 
         bitmap.Save(path, ImageFormat.Png);

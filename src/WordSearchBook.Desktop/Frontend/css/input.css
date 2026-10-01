@@ -175,6 +175,10 @@
   .page-layout-card { @apply bg-white; }
   .page-layout-card-heading { @apply flex items-center justify-between gap-4; }
   .page-layout-card-heading strong { @apply text-sm font-bold text-slate-800; }
+  .page-layout-file-list { @apply grid min-w-0 gap-2; }
+  .page-layout-file-list span { @apply flex flex-wrap items-baseline gap-2; }
+  .page-layout-file-list small { @apply text-[11px] font-semibold text-slate-400; }
+  .page-layout-help { @apply mt-3 text-xs leading-5 text-slate-500; }
   .page-layout-facts { @apply mt-4 grid grid-cols-2 gap-3; }
   .page-layout-facts div { @apply min-w-0 rounded-lg border border-slate-100 bg-white px-3 py-2; }
   .page-layout-facts div:last-child { @apply col-span-2; }

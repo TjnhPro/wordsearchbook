@@ -20,6 +20,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
 
             var rendered = renderer.Render(
                 layoutPath,
+                FrontLayoutPath(directory),
                 CreateTopic(),
                 1,
                 CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -41,11 +42,104 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     }
 
     [Fact]
+    public void DrawsFrontLayoutLastAndPreservesTransparentPixelsOnPuzzlePage()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var layoutPath = Path.Combine(directory, "page_layout.png");
+            WriteImage(layoutPath, 2588, 3375, Color.White);
+            WriteFrontOverlay(FrontLayoutPath(directory));
+            using (var sourceOverlay = new Bitmap(FrontLayoutPath(directory)))
+            {
+                Assert.Equal(Color.Lime.ToArgb(), sourceOverlay.GetPixel(110, 310).ToArgb());
+                Assert.Equal(0, sourceOverlay.GetPixel(140, 340).A);
+            }
+
+            var rendered = new SystemDrawingWordSearchPageRenderer().Render(
+                layoutPath,
+                FrontLayoutPath(directory),
+                CreateTopic(),
+                1,
+                CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                CreateSettings(),
+                WordSearchArtifactKind.Page);
+
+            using var stream = new MemoryStream(rendered.Content);
+            using var page = new Bitmap(stream);
+            Assert.Equal(Color.Lime.ToArgb(), page.GetPixel(110, 310).ToArgb());
+            Assert.Equal(Color.Red.ToArgb(), page.GetPixel(140, 340).ToArgb());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoesNotDrawFrontLayoutOnAnswerPage()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var layoutPath = Path.Combine(directory, "page_layout.png");
+            WriteImage(layoutPath, 2588, 3375, Color.White);
+            WriteFrontOverlay(FrontLayoutPath(directory));
+
+            var rendered = new SystemDrawingWordSearchPageRenderer().Render(
+                layoutPath,
+                FrontLayoutPath(directory),
+                CreateTopic(),
+                1,
+                CreateBoardArtifact(WordSearchArtifactKind.BoardGameAnswer),
+                CreateSettings(),
+                WordSearchArtifactKind.PageAnswer);
+
+            using var stream = new MemoryStream(rendered.Content);
+            using var page = new Bitmap(stream);
+            Assert.Equal(Color.Red.ToArgb(), page.GetPixel(110, 310).ToArgb());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RejectsMissingFrontLayoutForPuzzlePageWithStableCode()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var layoutPath = Path.Combine(directory, "page_layout.png");
+            WriteImage(layoutPath, 2588, 3375, Color.White);
+            File.Delete(FrontLayoutPath(directory));
+
+            var exception = Assert.Throws<WordSearchGenerationException>(() =>
+                new SystemDrawingWordSearchPageRenderer().Render(
+                    layoutPath,
+                    FrontLayoutPath(directory),
+                    CreateTopic(),
+                    1,
+                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                    CreateSettings(),
+                    WordSearchArtifactKind.Page));
+
+            Assert.Equal("front_layout_not_found", exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RejectsMissingPageLayoutWithStableCode()
     {
         var exception = Assert.Throws<WordSearchGenerationException>(() =>
             new SystemDrawingWordSearchPageRenderer().Render(
                 Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.png"),
+                Path.Combine(Path.GetTempPath(), $"missing-front-{Guid.NewGuid():N}.png"),
                 CreateTopic(),
                 1,
                 CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -67,6 +161,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     CreateTopic(),
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -101,6 +196,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     CreateTopic(),
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -129,6 +225,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var settings = CreateSettings();
             var rendered = new SystemDrawingWordSearchPageRenderer().Render(
                 path,
+                FrontLayoutPath(directory),
                 CreateTopic("WIND DOWN STRETCH"),
                 1,
                 CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -173,6 +270,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     CreateTopic("WIND DOWN STRETCH"),
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -220,6 +318,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
 
             var rendered = new SystemDrawingWordSearchPageRenderer().Render(
                 path,
+                FrontLayoutPath(directory),
                 topic,
                 85,
                 CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -269,6 +368,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     topic,
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -307,6 +407,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     CreateTopic(),
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -353,6 +454,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     CreateTopic(),
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -389,6 +491,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
                     path,
+                    FrontLayoutPath(directory),
                     CreateTopic(),
                     1,
                     CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
@@ -481,10 +584,26 @@ public sealed class SystemDrawingWordSearchPageRendererTests
         image.Save(path, ImageFormat.Png);
     }
 
+    private static void WriteFrontOverlay(string path)
+    {
+        using var image = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(image))
+        {
+            graphics.Clear(Color.Transparent);
+            using var brush = new SolidBrush(Color.Lime);
+            graphics.FillRectangle(brush, 105, 305, 20, 20);
+        }
+
+        image.Save(path, ImageFormat.Png);
+    }
+
     private static string CreateTemporaryDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"word-search-page-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
+        WriteImage(FrontLayoutPath(path), 2588, 3375, Color.Transparent);
         return path;
     }
+
+    private static string FrontLayoutPath(string directory) => Path.Combine(directory, "front_layout.png");
 }

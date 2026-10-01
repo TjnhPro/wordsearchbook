@@ -15,17 +15,12 @@ public sealed class BrandValidationDefinitionTests
     }
 
     [Fact]
-    public void DefinitionTracksRequiredLayoutAndOptionalImageFolders()
+    public void DefinitionTracksRequiredLayoutsAndOptionalImageFolders()
     {
         Assert.Collection(
             BrandValidationDefinition.Entries,
-            pageLayout =>
-            {
-                Assert.Equal(BrandValidationDefinition.PageLayoutKey, pageLayout.Key);
-                Assert.Equal(BrandValidationTargetKind.File, pageLayout.TargetKind);
-                Assert.True(pageLayout.Required);
-                Assert.Equal([".png"], pageLayout.Extensions);
-            },
+            pageLayout => AssertRequiredLayout(pageLayout, BrandValidationDefinition.PageLayoutKey),
+            frontLayout => AssertRequiredLayout(frontLayout, BrandValidationDefinition.FrontLayoutKey),
             front => AssertOptionalImageFolder(front, BrandValidationDefinition.FrontKey),
             back => AssertOptionalImageFolder(back, BrandValidationDefinition.BackKey));
     }
@@ -64,6 +59,15 @@ public sealed class BrandValidationDefinitionTests
         Assert.False(entry.Required);
         Assert.False(entry.Recursive);
         Assert.Equal([".jpeg", ".jpg", ".png"], entry.Extensions);
+    }
+
+    private static void AssertRequiredLayout(BrandValidationEntryDefinition entry, string expectedKey)
+    {
+        Assert.Equal(expectedKey, entry.Key);
+        Assert.Equal(BrandValidationTargetKind.File, entry.TargetKind);
+        Assert.True(entry.Required);
+        Assert.False(entry.Recursive);
+        Assert.Equal([".png"], entry.Extensions);
     }
 }
 

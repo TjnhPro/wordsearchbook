@@ -36,6 +36,7 @@ public sealed class WorkspaceTaskIntegrationTests
             Assert.Equal(2000, brand.Settings!.BoardGame.Rectangle.Width);
             Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "settings.json")));
             Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "page_layout.png")));
+            Assert.True(File.Exists(Path.Combine(root, "brands", "new-brand", "front_layout.png")));
         }
         finally
         {
@@ -155,6 +156,9 @@ public sealed class WorkspaceTaskIntegrationTests
         File.Move(
             Path.Combine(templateDirectory, "page_layout.png"),
             Path.Combine(destination, "brands", "demo", "page_layout.png"));
+        File.Move(
+            Path.Combine(templateDirectory, "front_layout.png"),
+            Path.Combine(destination, "brands", "demo", "front_layout.png"));
         Directory.Delete(templateDirectory, recursive: true);
 
         return destination;

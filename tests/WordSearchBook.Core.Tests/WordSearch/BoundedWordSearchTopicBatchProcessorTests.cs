@@ -18,7 +18,7 @@ public sealed class BoundedWordSearchTopicBatchProcessorTests
             WordSearchSettingsDefaults.CreateGlobal() with { MaximumProcessingConcurrency = 2 },
             WordSearchSettingsDefaults.CreateBrand());
 
-        var results = await batch.ProcessAsync(topics, "page-layout.png", settings, cache);
+        var results = await batch.ProcessAsync(topics, "page-layout.png", "front-layout.png", settings, cache);
 
         Assert.Equal(2, processor.MaximumObservedConcurrency);
         Assert.Equal([1, 2, 3], results.Select(result => result.Index));
@@ -35,6 +35,7 @@ public sealed class BoundedWordSearchTopicBatchProcessorTests
         var exception = await Assert.ThrowsAsync<WordSearchGenerationException>(() => batch.ProcessAsync(
             [Topic(1), Topic(1)],
             "page-layout.png",
+            "front-layout.png",
             new WordSearchSettingsBundle(WordSearchSettingsDefaults.CreateGlobal(), WordSearchSettingsDefaults.CreateBrand()),
             cache));
 
@@ -58,6 +59,7 @@ public sealed class BoundedWordSearchTopicBatchProcessorTests
         public WordSearchTopicArtifactSet Process(
             WordSearchTopic topic,
             string pageLayoutPath,
+            string frontLayoutPath,
             WordSearchSettingsBundle settings)
         {
             Interlocked.Increment(ref startedCount);

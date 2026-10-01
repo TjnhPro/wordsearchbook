@@ -18,8 +18,11 @@ public sealed class BrandPagePreviewServiceTests
         {
             var brandDirectory = Path.Combine(root, "brands", "demo");
             var layoutPath = Path.Combine(brandDirectory, "page_layout.png");
+            var frontLayoutPath = Path.Combine(brandDirectory, "front_layout.png");
             var previewPath = Path.Combine(brandDirectory, BrandPagePreviewSample.OutputFileName);
             var layoutBefore = await File.ReadAllBytesAsync(layoutPath);
+            WriteFrontOverlay(frontLayoutPath);
+            var frontLayoutBefore = await File.ReadAllBytesAsync(frontLayoutPath);
             await File.WriteAllTextAsync(previewPath, "old preview");
             using var services = BuildServices();
 
@@ -35,9 +38,11 @@ public sealed class BrandPagePreviewServiceTests
                 Assert.Equal(2588, preview.Width);
                 Assert.Equal(3375, preview.Height);
                 Assert.Equal(ImageFormat.Png.Guid, preview.RawFormat.Guid);
+                Assert.Equal(Color.Lime.ToArgb(), preview.GetPixel(10, 10).ToArgb());
             }
 
             Assert.Equal(layoutBefore, await File.ReadAllBytesAsync(layoutPath));
+            Assert.Equal(frontLayoutBefore, await File.ReadAllBytesAsync(frontLayoutPath));
             Assert.False(File.Exists(Path.Combine(brandDirectory, "brand.validation.json")));
             Assert.Empty(Directory.EnumerateFiles(brandDirectory, "*.tmp"));
         }
@@ -88,5 +93,18 @@ public sealed class BrandPagePreviewServiceTests
         await reader.ReadGlobalAsync(root);
         await new JsonWordSearchSettingsWriter(reader).CreateBrandAsync(root, "demo");
         return root;
+    }
+
+    private static void WriteFrontOverlay(string path)
+    {
+        using var image = new Bitmap(2588, 3375, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(image))
+        {
+            graphics.Clear(Color.Transparent);
+            using var brush = new SolidBrush(Color.Lime);
+            graphics.FillRectangle(brush, 0, 0, 20, 20);
+        }
+
+        image.Save(path, ImageFormat.Png);
     }
 }

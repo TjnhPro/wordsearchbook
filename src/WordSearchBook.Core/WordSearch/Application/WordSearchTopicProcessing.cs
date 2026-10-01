@@ -11,6 +11,7 @@ public interface IWordSearchTopicProcessor
     WordSearchTopicArtifactSet Process(
         WordSearchTopic topic,
         string pageLayoutPath,
+        string frontLayoutPath,
         WordSearchSettingsBundle settings);
 }
 
@@ -22,10 +23,12 @@ public sealed class WordSearchTopicProcessor(
     public WordSearchTopicArtifactSet Process(
         WordSearchTopic topic,
         string pageLayoutPath,
+        string frontLayoutPath,
         WordSearchSettingsBundle settings)
     {
         ArgumentNullException.ThrowIfNull(topic);
         ArgumentException.ThrowIfNullOrWhiteSpace(pageLayoutPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(frontLayoutPath);
         ArgumentNullException.ThrowIfNull(settings);
 
         var puzzle = puzzleGenerator.Generate(
@@ -41,8 +44,8 @@ public sealed class WordSearchTopicProcessor(
         [
             board,
             answerBoard,
-            pageRenderer.Render(pageLayoutPath, topic, topic.Index, board, settings, WordSearchArtifactKind.Page),
-            pageRenderer.Render(pageLayoutPath, topic, topic.Index, answerBoard, settings, WordSearchArtifactKind.PageAnswer)
+            pageRenderer.Render(pageLayoutPath, frontLayoutPath, topic, topic.Index, board, settings, WordSearchArtifactKind.Page),
+            pageRenderer.Render(pageLayoutPath, frontLayoutPath, topic, topic.Index, answerBoard, settings, WordSearchArtifactKind.PageAnswer)
         ];
         return new WordSearchTopicArtifactSet(topic, artifacts, puzzle.Placements);
     }
@@ -53,6 +56,7 @@ public interface IWordSearchTopicBatchProcessor
     Task<IReadOnlyList<GeneratedWordSearchTopic>> ProcessAsync(
         IReadOnlyList<WordSearchTopic> topics,
         string pageLayoutPath,
+        string frontLayoutPath,
         WordSearchSettingsBundle settings,
         IWordSearchCacheSession cacheSession,
         IProgress<WordSearchGenerationProgress>? progress = null,
@@ -65,12 +69,15 @@ public sealed class BoundedWordSearchTopicBatchProcessor(IWordSearchTopicProcess
     public async Task<IReadOnlyList<GeneratedWordSearchTopic>> ProcessAsync(
         IReadOnlyList<WordSearchTopic> topics,
         string pageLayoutPath,
+        string frontLayoutPath,
         WordSearchSettingsBundle settings,
         IWordSearchCacheSession cacheSession,
         IProgress<WordSearchGenerationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(topics);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pageLayoutPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(frontLayoutPath);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(cacheSession);
         var duplicate = topics.GroupBy(topic => topic.Index).FirstOrDefault(group => group.Count() > 1);
@@ -120,7 +127,7 @@ public sealed class BoundedWordSearchTopicBatchProcessor(IWordSearchTopicProcess
                 await semaphore.WaitAsync(remainingWorkCancellation.Token);
                 entered = true;
                 remainingWorkCancellation.Token.ThrowIfCancellationRequested();
-                var artifacts = topicProcessor.Process(topic, pageLayoutPath, settings);
+                var artifacts = topicProcessor.Process(topic, pageLayoutPath, frontLayoutPath, settings);
                 results[position] = await cacheSession.PublishTopicAsync(
                     artifacts,
                     remainingWorkCancellation.Token);

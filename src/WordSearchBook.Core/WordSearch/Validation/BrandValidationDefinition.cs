@@ -21,19 +21,21 @@ public sealed record BrandValidationEntryDefinition(
 
 public static class BrandValidationDefinition
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
     public const int AssetFingerprintFormatVersion = 2;
     public const string PageLayoutKey = "page-layout";
+    public const string FrontLayoutKey = "front-layout";
     public const string FrontKey = "front";
     public const string BackKey = "back";
     public const string PageLayoutRelativePath = "page_layout.png";
+    public const string FrontLayoutRelativePath = "front_layout.png";
     public const string FrontRelativePath = "front";
     public const string BackRelativePath = "back";
     public const int PageWidth = 2588;
     public const int PageHeight = 3375;
 
     public static readonly DateTimeOffset ChangedAtUtc =
-        new(2026, 9, 30, 12, 0, 0, TimeSpan.Zero);
+        new(2026, 10, 1, 5, 0, 0, TimeSpan.Zero);
 
     public static readonly IReadOnlyList<string> SupportedImageExtensions =
         [".jpeg", ".jpg", ".png"];
@@ -44,6 +46,14 @@ public static class BrandValidationDefinition
             PageLayoutKey,
             BrandValidationTargetKind.File,
             PageLayoutRelativePath,
+            Required: true,
+            Recursive: false,
+            [".png"],
+            [$"dimensions:{PageWidth}x{PageHeight}", "exists", "format:png", "readable"]),
+        new(
+            FrontLayoutKey,
+            BrandValidationTargetKind.File,
+            FrontLayoutRelativePath,
             Required: true,
             Recursive: false,
             [".png"],

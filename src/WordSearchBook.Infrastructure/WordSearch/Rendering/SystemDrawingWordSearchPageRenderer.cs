@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -15,6 +16,7 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
 
     public RenderedWordSearchArtifact Render(
         string pageLayoutPath,
+        string frontLayoutPath,
         WordSearchTopic topic,
         int pageNumber,
         RenderedWordSearchArtifact boardArtifact,
@@ -22,12 +24,16 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         WordSearchArtifactKind outputKind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pageLayoutPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(frontLayoutPath);
         ArgumentNullException.ThrowIfNull(topic);
         ArgumentNullException.ThrowIfNull(boardArtifact);
         ArgumentNullException.ThrowIfNull(settings);
         ValidateInputs(topic, pageNumber, boardArtifact, settings, outputKind);
 
         using var layout = LoadLayout(pageLayoutPath, settings.Global.Page);
+        using var frontLayout = outputKind == WordSearchArtifactKind.Page
+            ? LoadLayout(frontLayoutPath, settings.Global.Page, isFrontLayout: true)
+            : null;
         try
         {
             using var boardStream = new MemoryStream(boardArtifact.Content, writable: false);
@@ -42,9 +48,14 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
             using (var graphics = Graphics.FromImage(page))
             {
                 SystemDrawingRenderSupport.Configure(graphics);
+                graphics.CompositingMode = CompositingMode.SourceOver;
                 graphics.DrawImageUnscaled(layout, 0, 0);
                 graphics.DrawImageUnscaled(board, boardRectangle.X, boardRectangle.Y);
                 DrawPageText(graphics, topic, pageNumber, settings);
+                if (frontLayout is not null)
+                {
+                    graphics.DrawImageUnscaled(frontLayout, 0, 0);
+                }
             }
 
             return SystemDrawingRenderSupport.EncodePng(outputKind, page);
@@ -62,11 +73,13 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         }
     }
 
-    private static Bitmap LoadLayout(string path, PageSize pageSize)
+    private static Bitmap LoadLayout(string path, PageSize pageSize, bool isFrontLayout = false)
     {
+        var codePrefix = isFrontLayout ? "front_layout" : "page_layout";
+        var displayName = isFrontLayout ? "Front layout" : "Page layout";
         if (!File.Exists(path))
         {
-            throw new WordSearchGenerationException("page_layout_not_found", $"Page layout was not found: {path}");
+            throw new WordSearchGenerationException($"{codePrefix}_not_found", $"{displayName} was not found: {path}");
         }
 
         try
@@ -76,13 +89,21 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
                 source.Width != pageSize.Width || source.Height != pageSize.Height)
             {
                 throw new WordSearchGenerationException(
-                    "page_layout_invalid",
-                    $"Page layout must be a {pageSize.Width}x{pageSize.Height} PNG image.");
+                    $"{codePrefix}_invalid",
+                    $"{displayName} must be a {pageSize.Width}x{pageSize.Height} PNG image.");
             }
 
             var copy = SystemDrawingRenderSupport.CreateBitmap(source.Width, source.Height);
             using var graphics = Graphics.FromImage(copy);
-            graphics.DrawImageUnscaled(source, 0, 0);
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.DrawImage(
+                source,
+                new Rectangle(0, 0, source.Width, source.Height),
+                0,
+                0,
+                source.Width,
+                source.Height,
+                GraphicsUnit.Pixel);
             return copy;
         }
         catch (WordSearchGenerationException)
@@ -91,11 +112,11 @@ public sealed class SystemDrawingWordSearchPageRenderer : IWordSearchPageRendere
         }
         catch (Exception exception) when (exception is ArgumentException or OutOfMemoryException or ExternalException)
         {
-            throw new WordSearchGenerationException("page_layout_invalid", $"Page layout is not a readable PNG image: {path}", exception);
+            throw new WordSearchGenerationException($"{codePrefix}_invalid", $"{displayName} is not a readable PNG image: {path}", exception);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            throw new WordSearchGenerationException("page_layout_read_failed", $"Page layout could not be read: {path}", exception);
+            throw new WordSearchGenerationException($"{codePrefix}_read_failed", $"{displayName} could not be read: {path}", exception);
         }
     }
 

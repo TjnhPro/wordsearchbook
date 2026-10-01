@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -276,7 +276,7 @@ test("allows generation only for a certified brand", () => {
 
 test("renders optional brand folders with empty and per-file validation states", () => {
   const empty = brandAssetFolderMarkup({ key: "front", relativePath: "front", exists: true, files: [] });
-  assert.match(empty, /Front/);
+  assert.match(empty, /Front PDF pages/);
   assert.match(empty, /No images — optional/);
   assert.match(empty, /0 images/);
 
@@ -289,13 +289,26 @@ test("renders optional brand folders with empty and per-file validation states",
       { name: "final.png", relativePath: "back/final.png", extension: ".png", status: "Validated" }
     ]
   }, [{ target: "back/closing.jpg", message: "Wrong size" }]);
-  assert.match(populated, /Back/);
+  assert.match(populated, /Back PDF pages/);
   assert.match(populated, /2 images/);
   assert.match(populated, /closing\.jpg/);
   assert.match(populated, /Invalid/);
   assert.match(populated, /Wrong size/);
   assert.match(populated, /final\.png/);
   assert.match(populated, /Validated/);
+});
+
+test("describes both required page layout layers and puzzle-only foreground", () => {
+  const markup = brandLayoutPanels({
+    id: "demo",
+    validation: { status: "Validated", fingerprint: "sha256:abcdef", validatedAtUtc: "2026-10-01T00:00:00Z" }
+  });
+
+  assert.match(markup, /page_layout\.png/);
+  assert.match(markup, /front_layout\.png/);
+  assert.match(markup, /Foreground · required/);
+  assert.match(markup, /transparent foreground last/);
+  assert.match(markup, /Answer pages do not use it/);
 });
 
 test("disables preview drawing for unsaved, saving, or active brand state", () => {

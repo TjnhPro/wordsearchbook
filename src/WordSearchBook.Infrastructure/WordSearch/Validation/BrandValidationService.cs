@@ -94,32 +94,24 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
         var failures = new List<BrandValidationFailure>();
         var assets = new List<BrandValidationAssetFact>();
         var layoutPath = BrandAssetDiscovery.ResolveLayoutPath(rootPath, brandId);
-
-        if (!File.Exists(layoutPath))
-        {
-            failures.Add(Failure(
-                BrandValidationDefinition.PageLayoutRelativePath,
-                "exists",
-                "page_layout_not_found",
-                $"Page layout was not found: {layoutPath}"));
-        }
-        else
-        {
-            var asset = ValidateImage(
-                layoutPath,
-                BrandValidationDefinition.PageLayoutRelativePath,
-                requirePng: true,
-                failures);
-            if (asset is not null)
-            {
-                assets.Add(asset);
-            }
-        }
+        var frontLayoutPath = BrandAssetDiscovery.ResolveFrontLayoutPath(rootPath, brandId);
+        ValidateRequiredLayout(
+            layoutPath,
+            BrandValidationDefinition.PageLayoutRelativePath,
+            ImageValidationKind.PageLayout,
+            failures,
+            assets);
+        ValidateRequiredLayout(
+            frontLayoutPath,
+            BrandValidationDefinition.FrontLayoutRelativePath,
+            ImageValidationKind.FrontLayout,
+            failures,
+            assets);
 
         foreach (var file in BrandAssetDiscovery.DiscoverTrackedFiles(rootPath, brandId))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var asset = ValidateImage(file.FullPath, file.RelativePath, requirePng: false, failures);
+            var asset = ValidateImage(file.FullPath, file.RelativePath, ImageValidationKind.OptionalAsset, failures);
             if (asset is not null)
             {
                 assets.Add(asset);
@@ -227,9 +219,10 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
     private static BrandValidationAssetFact? ValidateImage(
         string fullPath,
         string relativePath,
-        bool requirePng,
+        ImageValidationKind kind,
         ICollection<BrandValidationFailure> failures)
     {
+        var profile = ValidationProfile(kind);
         try
         {
             using var stream = new FileStream(
@@ -242,11 +235,11 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
             using var image = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: true);
             var isPng = image.RawFormat.Guid == ImageFormat.Png.Guid;
             var isJpeg = image.RawFormat.Guid == ImageFormat.Jpeg.Guid;
-            if (requirePng && !isPng)
+            if (profile.RequirePng && !isPng)
             {
-                failures.Add(Failure(relativePath, "format:png", "page_layout_format_invalid", "Page layout must be a PNG image."));
+                failures.Add(Failure(relativePath, "format:png", $"{profile.CodePrefix}_format_invalid", $"{profile.DisplayName} must be a PNG image."));
             }
-            else if (!requirePng && !isPng && !isJpeg)
+            else if (!profile.RequirePng && !isPng && !isJpeg)
             {
                 failures.Add(Failure(relativePath, "format:jpeg|png", "brand_asset_format_invalid", $"Brand asset '{relativePath}' must be a PNG or JPEG image."));
             }
@@ -254,7 +247,7 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
             if (image.Width != BrandValidationDefinition.PageWidth ||
                 image.Height != BrandValidationDefinition.PageHeight)
             {
-                var code = requirePng ? "page_layout_dimensions_invalid" : "brand_asset_dimensions_invalid";
+                var code = profile.RequirePng ? $"{profile.CodePrefix}_dimensions_invalid" : "brand_asset_dimensions_invalid";
                 failures.Add(Failure(
                     relativePath,
                     $"dimensions:{BrandValidationDefinition.PageWidth}x{BrandValidationDefinition.PageHeight}",
@@ -268,15 +261,15 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
         }
         catch (OutOfMemoryException exception)
         {
-            failures.Add(UnreadableFailure(relativePath, requirePng, exception.Message));
+            failures.Add(UnreadableFailure(relativePath, profile, exception.Message));
         }
         catch (ArgumentException exception)
         {
-            failures.Add(UnreadableFailure(relativePath, requirePng, exception.Message));
+            failures.Add(UnreadableFailure(relativePath, profile, exception.Message));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ExternalException)
         {
-            var code = requirePng ? "page_layout_read_failed" : "brand_asset_read_failed";
+            var code = profile.RequirePng ? $"{profile.CodePrefix}_read_failed" : "brand_asset_read_failed";
             failures.Add(Failure(relativePath, "readable", code, $"Image '{relativePath}' could not be read: {exception.Message}"));
         }
 
@@ -297,6 +290,7 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
             .Select(file => BrandValidationDefinition.NormalizeRelativePath(file.RelativePath))
             .ToHashSet(StringComparer.Ordinal);
         if (!expectedPaths.Contains(BrandValidationDefinition.PageLayoutRelativePath) ||
+            !expectedPaths.Contains(BrandValidationDefinition.FrontLayoutRelativePath) ||
             assets.Count != expectedPaths.Count)
         {
             return false;
@@ -340,13 +334,58 @@ public sealed class BrandValidationService(IBrandValidationStateStore stateStore
             reasonCode,
             record?.Assets);
 
-    private static BrandValidationFailure UnreadableFailure(string relativePath, bool requirePng, string detail) =>
+    private static void ValidateRequiredLayout(
+        string fullPath,
+        string relativePath,
+        ImageValidationKind kind,
+        ICollection<BrandValidationFailure> failures,
+        ICollection<BrandValidationAssetFact> assets)
+    {
+        var profile = ValidationProfile(kind);
+        if (!File.Exists(fullPath))
+        {
+            failures.Add(Failure(
+                relativePath,
+                "exists",
+                $"{profile.CodePrefix}_not_found",
+                $"{profile.DisplayName} was not found: {fullPath}"));
+            return;
+        }
+
+        var asset = ValidateImage(fullPath, relativePath, kind, failures);
+        if (asset is not null)
+        {
+            assets.Add(asset);
+        }
+    }
+
+    private static ImageValidationProfile ValidationProfile(ImageValidationKind kind) => kind switch
+    {
+        ImageValidationKind.PageLayout => new(true, "page_layout", "Page layout"),
+        ImageValidationKind.FrontLayout => new(true, "front_layout", "Front layout"),
+        ImageValidationKind.OptionalAsset => new(false, "brand_asset", "Brand asset"),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
+
+    private static BrandValidationFailure UnreadableFailure(
+        string relativePath,
+        ImageValidationProfile profile,
+        string detail) =>
         Failure(
             relativePath,
             "readable",
-            requirePng ? "page_layout_invalid" : "brand_asset_invalid",
+            profile.RequirePng ? $"{profile.CodePrefix}_invalid" : "brand_asset_invalid",
             $"Image '{relativePath}' is not readable: {detail}");
 
     private static BrandValidationFailure Failure(string target, string rule, string code, string message) =>
         new(target, rule, code, message);
+
+    private enum ImageValidationKind
+    {
+        PageLayout,
+        FrontLayout,
+        OptionalAsset
+    }
+
+    private sealed record ImageValidationProfile(bool RequirePng, string CodePrefix, string DisplayName);
 }
