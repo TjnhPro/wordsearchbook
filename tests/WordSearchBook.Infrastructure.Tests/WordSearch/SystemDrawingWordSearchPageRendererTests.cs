@@ -119,7 +119,51 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     }
 
     [Fact]
-    public void ReportsKeywordsThatOverlapAcrossColumns()
+    public void AllowsKeywordToCrossColumnMidpointWhenColumnEnvelopesDoNotTouch()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var path = Path.Combine(directory, "page_layout.png");
+            WriteImage(path, 2588, 3375, Color.White);
+            var settings = CreateSettings();
+            settings = settings with
+            {
+                Brand = settings.Brand with
+                {
+                    KeywordList = settings.Brand.KeywordList with
+                    {
+                        Columns =
+                        [
+                            new KeywordColumnAnchor(443, 2300),
+                            new KeywordColumnAnchor(1010, 2300),
+                            new KeywordColumnAnchor(1578, 2300),
+                            new KeywordColumnAnchor(2146, 2300)
+                        ],
+                        Font = new FontSettings("Arial", 10, "#000000")
+                    }
+                }
+            };
+            var topic = CreateTopic(index => index == 5 ? "OFFER ENCOURAGEMENT" : "A");
+
+            var rendered = new SystemDrawingWordSearchPageRenderer().Render(
+                path,
+                topic,
+                85,
+                CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
+                settings,
+                WordSearchArtifactKind.Page);
+
+            Assert.Equal(WordSearchArtifactKind.Page, rendered.Kind);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ReportsKeywordEnvelopesThatTouchAcrossAdjacentColumns()
     {
         var directory = CreateTemporaryDirectory();
         try
@@ -143,48 +187,12 @@ public sealed class SystemDrawingWordSearchPageRendererTests
                     }
                 }
             };
-
-            var exception = Assert.Throws<WordSearchGenerationException>(() =>
-                new SystemDrawingWordSearchPageRenderer().Render(
-                    path,
-                    CreateTopic(),
-                    1,
-                    CreateBoardArtifact(WordSearchArtifactKind.BoardGame),
-                    settings,
-                    WordSearchArtifactKind.Page));
-
-            Assert.Equal("keyword_collision", exception.Code);
-            Assert.Contains("CSV row 2, topic 'AMAZING ANIMALS'", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("overlaps Keyword", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("Adjust the keyword columns or row spacing", exception.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void ReportsKeywordThatIsTooWideForItsColumn()
-    {
-        var directory = CreateTemporaryDirectory();
-        try
-        {
-            var path = Path.Combine(directory, "page_layout.png");
-            WriteImage(path, 2588, 3375, Color.White);
-            var settings = CreateSettings();
-            settings = settings with
+            var topic = CreateTopic(index => index switch
             {
-                Brand = settings.Brand with
-                {
-                    KeywordList = settings.Brand.KeywordList with
-                    {
-                        StepY = 150,
-                        Font = new FontSettings("Arial", 20, "#000000")
-                    }
-                }
-            };
-            var topic = CreateTopic(index => index == 5 ? "GROUNDED BREATH" : "A");
+                4 => "LEFT ENVELOPE",
+                7 => "RIGHT ENVELOPE",
+                _ => "A"
+            });
 
             var exception = Assert.Throws<WordSearchGenerationException>(() =>
                 new SystemDrawingWordSearchPageRenderer().Render(
@@ -196,9 +204,10 @@ public sealed class SystemDrawingWordSearchPageRendererTests
                     WordSearchArtifactKind.Page));
 
             Assert.Equal("keyword_slot_width_overflow", exception.Code);
-            Assert.Contains("CSV row 7, topic 'AMAZING ANIMALS'", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("Keyword 'GROUNDED BREATH' is too wide for keyword column 2", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("Shorten the Keyword", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("CSV row 6, topic 'AMAZING ANIMALS': Keyword 'LEFT ENVELOPE'", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("touches or overlaps Keyword 'RIGHT ENVELOPE' from CSV row 9", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("between keyword columns 1 and 2", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Shorten either Keyword", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -207,7 +216,7 @@ public sealed class SystemDrawingWordSearchPageRendererTests
     }
 
     [Fact]
-    public void ReportsKeywordThatIsTooTallForItsRow()
+    public void ReportsKeywordRowsThatTouchWithinAColumn()
     {
         var directory = CreateTemporaryDirectory();
         try
@@ -233,8 +242,9 @@ public sealed class SystemDrawingWordSearchPageRendererTests
                     WordSearchArtifactKind.Page));
 
             Assert.Equal("keyword_slot_height_overflow", exception.Code);
-            Assert.Contains("Keyword 'KEYWORD 01' is too tall for its row", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("increase the keyword row spacing", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Keyword 'KEYWORD 01' touches or overlaps Keyword 'KEYWORD 02' from CSV row 3", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("in keyword column 1", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("Increase the keyword row spacing", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
