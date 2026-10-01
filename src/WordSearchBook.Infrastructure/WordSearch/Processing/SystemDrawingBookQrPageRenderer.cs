@@ -57,7 +57,14 @@ public sealed class SystemDrawingBookQrPageRenderer : IBookQrPageRenderer
                 graphics.DrawImageUnscaled(template, 0, 0);
                 graphics.CompositingMode = CompositingMode.SourceOver;
                 graphics.FillRectangle(Brushes.White, settings.X, settings.Y, settings.Size, settings.Size);
-                graphics.DrawImageUnscaled(qrImage, qrX, qrY);
+                graphics.DrawImage(
+                    qrImage,
+                    new Rectangle(qrX, qrY, qrImage.Width, qrImage.Height),
+                    0,
+                    0,
+                    qrImage.Width,
+                    qrImage.Height,
+                    GraphicsUnit.Pixel);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
