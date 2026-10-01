@@ -362,14 +362,6 @@ public sealed class WebViewBridgeRouterTests
         Assert.Equal("#AABBCC", request.Settings.AnswerLine.Color);
     }
 
-    [Fact]
-    public void ResolvesFrontendEntryPointBelowBaseDirectory()
-    {
-        var baseDirectory = Path.Combine(Path.GetTempPath(), "word-search-book-tests");
-        var result = FrontendPathResolver.GetIndexPath(baseDirectory);
-        Assert.Equal(Path.GetFullPath(Path.Combine(baseDirectory, "Frontend", "index.html")), result);
-    }
-
     private static WebViewBridgeRouter CreateRouter(out StubTaskManager manager)
     {
         return CreateRouter(out manager, out _);

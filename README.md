@@ -1,6 +1,6 @@
 # Word Search Book
 
-Word Search Book là ứng dụng Windows dùng để xây dựng workflow tạo sách word search. Repository hiện cung cấp nền tảng kiến trúc, desktop shell WPF + WebView2 và bridge tối thiểu giữa C# với frontend.
+Word Search Book là ứng dụng Windows dùng để xây dựng workflow tạo sách word search. Desktop shell WPF + WebView2 nhúng frontend trực tiếp vào executable và giao tiếp với backend qua bridge typed.
 
 ## Kiến trúc
 
@@ -15,9 +15,11 @@ Dependency chỉ đi theo hướng `Desktop → Infrastructure → Core`; Deskto
 
 ## Yêu cầu
 
-- Windows với Microsoft Edge WebView2 Runtime.
+- Windows x64 với Microsoft Edge WebView2 Runtime.
 - .NET SDK 10.0.401.
 - Node.js 24.18.0.
+
+Bản public self-contained không yêu cầu cài .NET Runtime; SDK và Node.js chỉ cần khi build source.
 
 ## Build và test
 
@@ -35,6 +37,18 @@ dotnet test WordSearchBook.sln --configuration Release --no-build
 ```powershell
 dotnet run --project src/WordSearchBook.Desktop/WordSearchBook.Desktop.csproj
 ```
+
+## Public release v0.1.0
+
+Tạo bản public local bằng:
+
+```powershell
+./scripts/publish-release.ps1 -ExpectedVersion 0.1.0
+```
+
+Artifact nằm tại `artifacts/release/WordSearchBook.exe` cùng checksum SHA-256. EXE self-contained chứa .NET Runtime, frontend và icon; WebView2 Runtime vẫn dùng bản hệ thống. Đặt EXE trong một thư mục có quyền ghi vì `brands/`, `input/`, `settings.json` và workspace được quản lý cạnh ứng dụng. Khi cập nhật chỉ cần đóng app và thay EXE, dữ liệu không bị đóng gói hoặc ghi đè.
+
+Push tag `v0.1.0` từ `main` sẽ chạy kiểm thử, xác minh package chỉ có một EXE và tạo GitHub Release. Bản MVP chưa được Authenticode-sign nên Windows SmartScreen có thể hiển thị cảnh báo. Chi tiết: [release notes](docs/release-0.1.md).
 
 ## Trạng thái baseline
 

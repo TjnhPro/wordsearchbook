@@ -14,6 +14,7 @@ public partial class MainWindow : Window
 {
     private readonly WebViewBridgeRouter bridgeRouter;
     private readonly ApplicationCloseCoordinator closeCoordinator;
+    private readonly FrontendResourceProvider frontendResources = new();
     private bool allowClose;
     private bool closeFlowRunning;
 
@@ -32,28 +33,46 @@ public partial class MainWindow : Window
     {
         try
         {
-            var pagePath = FrontendPathResolver.GetIndexPath(AppContext.BaseDirectory);
-            if (!File.Exists(pagePath))
-            {
-                throw new FileNotFoundException("The local frontend entry point was not found.", pagePath);
-            }
-
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
                 userDataFolder: GetWebViewUserDataFolder());
 
             await Browser.EnsureCoreWebView2Async(environment);
+            Browser.CoreWebView2.AddWebResourceRequestedFilter(
+                $"{FrontendResourceProvider.ApplicationOrigin}*",
+                CoreWebView2WebResourceContext.All);
+            Browser.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-            Browser.CoreWebView2.Navigate(new Uri(pagePath).AbsoluteUri);
+            Browser.CoreWebView2.Navigate(FrontendResourceProvider.IndexUri.AbsoluteUri);
         }
         catch (Exception exception)
         {
             MessageBox.Show(
-                $"The application UI could not start. Ensure Microsoft Edge WebView2 Runtime is installed and the frontend assets are present.\n\n{exception.Message}",
+                $"The application UI could not start. Ensure Microsoft Edge WebView2 Runtime is installed.\n\n{exception.Message}",
                 "Startup failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        var resource = frontendResources.Open(e.Request.Uri);
+        if (resource is null)
+        {
+            e.Response = Browser.CoreWebView2.Environment.CreateWebResourceResponse(
+                new MemoryStream("Not Found"u8.ToArray()),
+                404,
+                "Not Found",
+                "Content-Type: text/plain; charset=utf-8\r\nCache-Control: no-store");
+            return;
+        }
+
+        e.Response = Browser.CoreWebView2.Environment.CreateWebResourceResponse(
+            resource.Content,
+            200,
+            "OK",
+            $"Content-Type: {resource.ContentType}\r\nCache-Control: no-store");
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -146,6 +165,7 @@ public partial class MainWindow : Window
     {
         if (Browser.CoreWebView2 is not null)
         {
+            Browser.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
             Browser.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
         }
     }
