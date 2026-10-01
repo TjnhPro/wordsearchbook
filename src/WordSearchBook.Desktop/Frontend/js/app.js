@@ -9,7 +9,7 @@ const activeTaskStates = new Set(["Queued", "Running", "Cancelling"]);
 const state = {
   route: "books", snapshot: null, tasks: [], selectedBookId: null, selectedBrandId: null,
   bookSearchQuery: "", selectedBookTab: "overview", bookValidationFeedback: null, bookProcessingFeedback: null,
-  brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false,
+  brandSearchQuery: "", brandBaselineId: null, brandBaseline: null, brandDirty: false, brandSettingsRequireSave: false,
   brandSaving: false, brandValidationFeedback: null, brandPreviewFeedback: null,
   pendingNavigation: null, client: null, pollTimers: new Map()
 };
@@ -27,7 +27,7 @@ function brandValidationPresentation(validation) {
   if (status === "NeedsValidation") return { label: "Needs validation", tone: "warn" };
   return { label: "Not validated", tone: "neutral" };
 }
-function canGenerateWithBrand(brand) { return brand?.validation?.status === "Validated"; }
+function canGenerateWithBrand(brand) { return brand?.validation?.status === "Validated" && !brand?.settingsRequireSave; }
 function bookDataValidationPresentation(validation) {
   const status = validation?.status ?? "NotValidated";
   if (status === "Validated") return { label: "Validated", tone: "good" };
@@ -178,6 +178,8 @@ function renderBooks() {
     ? "Validate data.csv before processing."
     : !selectedBrand
       ? "Choose a Brand before processing."
+      : selectedBrandRecord?.settingsRequireSave
+        ? "Open Brand layouts and save this Brand once to add the required Quote settings."
       : selectedBrandRecord?.issue
         ? selectedBrandRecord.issue.message
         : !selectedBrandValidated
@@ -221,6 +223,12 @@ function anchoredTextEditor(name, label, region) {
   return `<fieldset class="settings-group brand-region-card"><legend>${label}</legend><div class="brand-region-fields">${settingInput(`${name}.x`, "Anchor X", region.x)}${settingInput(`${name}.y`, "Top Y", region.y)}${alignmentInput(`${name}.alignment`, region.alignment)}${fontInputs(name, region.font)}</div></fieldset>`;
 }
 
+function textRegionEditor(name, label, region, help = "") {
+  const rectangle = region.rectangle;
+  const helpMarkup = help ? `<p class="brand-region-help">${escapeHtml(help)}</p>` : "";
+  return `<fieldset class="settings-group brand-region-card"><legend>${escapeHtml(label)}</legend>${helpMarkup}<div class="brand-region-fields">${settingInput(`${name}.x`, "X", rectangle.x)}${settingInput(`${name}.y`, "Y", rectangle.y)}${settingInput(`${name}.width`, "Width", rectangle.width, "number", "min=\"1\"")}${settingInput(`${name}.height`, "Height", rectangle.height, "number", "min=\"1\"")}${fontInputs(name, region.font)}</div></fieldset>`;
+}
+
 function keywordListEditor(region) {
   const columnXInputs = region.columns.map((column, index) =>
     settingInput(`keywordList.column${index + 1}X`, `Column ${index + 1} X`, column.x)).join("");
@@ -232,7 +240,9 @@ function brandRowsMarkup(brands, selectedBrandId) {
   if (!brands.length) return `<div class="brand-list-empty"><strong>No matching brands</strong><p>Try a different brand name.</p></div>`;
   return brands.map(brand => {
     const validation = brandValidationPresentation(brand.validation);
-    return `<button class="brand-row ${brand.id === selectedBrandId ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-id="${escapeHtml(brand.id)}"><span><strong>${escapeHtml(brand.id)}</strong><small>${brand.settings ? "Settings ready" : "Settings need attention"}</small></span><span class="brand-row-badges">${brand.settings ? badge("Settings", "good") : badge("Settings", "bad")}${badge(validation.label, validation.tone)}</span></button>`;
+    const settingsLabel = brand.settingsRequireSave ? "Settings update required" : brand.settings ? "Settings ready" : "Settings need attention";
+    const settingsBadge = brand.settingsRequireSave ? badge("Update settings", "warn") : brand.settings ? badge("Settings", "good") : badge("Settings", "bad");
+    return `<button class="brand-row ${brand.id === selectedBrandId ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-id="${escapeHtml(brand.id)}"><span><strong>${escapeHtml(brand.id)}</strong><small>${settingsLabel}</small></span><span class="brand-row-badges">${settingsBadge}${badge(validation.label, validation.tone)}</span></button>`;
   }).join("");
 }
 
@@ -241,7 +251,7 @@ function brandLayoutPanels(brand) {
   const presentation = brandValidationPresentation(validation);
   const active = isBrandValidationActive(brand.id);
   const previewActive = isBrandPreviewActive(brand.id);
-  const guarded = state.brandDirty || state.brandSaving;
+  const guarded = state.brandDirty || state.brandSaving || state.brandSettingsRequireSave;
   const feedback = state.brandValidationFeedback?.brandId === brand.id ? state.brandValidationFeedback.failures ?? [] : [];
   const failures = feedback.length
     ? `<ul class="brand-validation-failures">${feedback.map(failure => `<li>${escapeHtml(failure.message)}</li>`).join("")}</ul>`
@@ -250,11 +260,13 @@ function brandLayoutPanels(brand) {
     ? `<p class="brand-validation-reason">${escapeHtml(validation.reasonCode)}</p>`
     : "";
   const validatedAt = validation.validatedAtUtc ? new Date(validation.validatedAtUtc).toLocaleString() : "Never";
-  const guardMessage = guarded ? "Save or discard settings changes before validating or drawing a demo." : "";
+  const guardMessage = state.brandSettingsRequireSave
+    ? "Save Brand once to add the required Quote settings before validating or drawing a demo."
+    : guarded ? "Save or discard settings changes before validating or drawing a demo." : "";
   const previewFeedback = state.brandPreviewFeedback?.brandId === brand.id ? state.brandPreviewFeedback : null;
   const previewFeedbackMarkup = `<p class="page-preview-feedback ${previewFeedback ? "" : "hidden"}" data-brand-preview-feedback data-state="${escapeHtml(previewFeedback?.tone ?? "neutral")}" role="status">${escapeHtml(previewFeedback?.message ?? "")}</p>`;
   const layoutPanel = `<fieldset class="settings-group brand-region-card page-layout-card"><legend>Page layouts</legend><div class="page-layout-card-heading"><div class="page-layout-file-list"><span><strong>page_layout.png</strong><small>Base · required</small></span><span><strong>front_layout.png</strong><small>Foreground · required</small></span></div>${badge(presentation.label, presentation.tone)}</div><p class="page-layout-help">Puzzle pages draw the transparent foreground last, above the board and text. Answer pages do not use it.</p><dl class="page-layout-facts"><div><dt>Required size</dt><dd>2588 × 3375 px</dd></div><div><dt>Last validated</dt><dd>${escapeHtml(validatedAt)}</dd></div><div><dt>Fingerprint</dt><dd title="${escapeHtml(validation.fingerprint ?? "")}">${escapeHtml(shortFingerprint(validation.fingerprint))}</dd></div></dl>${reason}${failures}<div class="page-layout-actions"><button class="button-secondary" type="button" data-action="validate-brand" data-brand-id="${escapeHtml(brand.id)}" data-brand-validation-button ${active || guarded ? "disabled" : ""}>${active ? "Validating…" : "Validate brand"}</button><span data-brand-validation-guard>${escapeHtml(guardMessage)}</span></div></fieldset>`;
-  const previewPanel = `<fieldset class="settings-group brand-region-card page-preview-panel"><legend>Puzzle page preview</legend><p>Draws a fixed 20-word sample with both required layout layers and saved brand settings.</p><code>page_layout.preview.png</code><div class="page-preview-actions"><button class="button-primary" type="button" data-action="draw-brand-preview" data-brand-id="${escapeHtml(brand.id)}" data-brand-preview-button ${brandPreviewActionDisabled(state.brandDirty, state.brandSaving, previewActive) ? "disabled" : ""}>${previewActive ? "Drawing…" : "Draw demo"}</button><button class="button-secondary" type="button" data-action="open-brand-folder" data-brand-id="${escapeHtml(brand.id)}">Open folder</button></div>${previewFeedbackMarkup}</fieldset>`;
+  const previewPanel = `<fieldset class="settings-group brand-region-card page-preview-panel"><legend>Puzzle page preview</legend><p>Draws a fixed 20-word sample and Quote with both required layout layers and saved brand settings.</p><code>page_layout.preview.png</code><div class="page-preview-actions"><button class="button-primary" type="button" data-action="draw-brand-preview" data-brand-id="${escapeHtml(brand.id)}" data-brand-preview-button ${brandPreviewActionDisabled(state.brandDirty || state.brandSettingsRequireSave, state.brandSaving, previewActive) ? "disabled" : ""}>${previewActive ? "Drawing…" : "Draw demo"}</button><button class="button-secondary" type="button" data-action="open-brand-folder" data-brand-id="${escapeHtml(brand.id)}">Open folder</button></div>${previewFeedbackMarkup}</fieldset>`;
   return `${layoutPanel}${previewPanel}`;
 }
 
@@ -298,6 +310,7 @@ function renderBrands() {
     state.selectedBrandId = brands.find(brand => brand.settings)?.id ?? brands[0].id;
   }
   const selected = brands.find(brand => brand.id === state.selectedBrandId);
+  state.brandSettingsRequireSave = Boolean(selected.settingsRequireSave);
   if (state.brandBaselineId !== selected.id || !state.brandDirty) {
     state.brandBaselineId = selected.id;
     state.brandBaseline = selected.settings ? canonicalBrandSettings(selected.settings) : null;
@@ -310,7 +323,8 @@ function renderBrands() {
     return `<div class="brand-workspace">${list}<section class="panel brand-detail-panel"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div>${badge("Settings invalid", "bad")}</div><div class="brand-detail-scroll"><div class="brand-region-grid">${brandLayoutPanels(selected)}${brandAssetPanels(selected)}</div>${issueMarkup(selected.issue)}</div></section></div>`;
   }
   const settings = selected.settings;
-  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="saved">All changes saved</span><button class="button-primary" data-brand-save-button type="submit" disabled>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${brandLayoutPanels(selected)}${anchoredTextEditor("topic", "Topic", settings.topic)}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}${keywordListEditor(settings.keywordList)}${boardGameEditor(settings.boardGame, settings.answerLine)}${brandAssetPanels(selected)}</div></div></form>`;
+  const saveStatus = selected.settingsRequireSave ? "Settings update required" : "All changes saved";
+  const detail = `<form class="panel brand-detail-panel" data-form="brand-settings" data-brand-id="${escapeHtml(selected.id)}"><div class="brand-panel-header"><div><p class="eyebrow">Selected brand</p><h3>${escapeHtml(selected.id)}</h3></div><div class="brand-save-actions"><span class="brand-save-status" data-brand-save-status data-state="${selected.settingsRequireSave ? "dirty" : "saved"}">${saveStatus}</span><button class="button-primary" data-brand-save-button type="submit" ${selected.settingsRequireSave ? "" : "disabled"}>Save brand</button></div></div><div class="brand-detail-scroll"><p class="brand-save-message hidden" data-brand-save-message role="status"></p><div class="brand-region-grid">${brandLayoutPanels(selected)}${anchoredTextEditor("topic", "Topic", settings.topic)}${textRegionEditor("quote", "Quote", settings.quote, "Centered horizontally and vertically; wraps at spaces only, up to two lines.")}${anchoredTextEditor("pageNumber", "Page number", settings.pageNumber)}${keywordListEditor(settings.keywordList)}${boardGameEditor(settings.boardGame, settings.answerLine)}${brandAssetPanels(selected)}</div></div></form>`;
   return `<div class="brand-workspace">${list}${detail}</div>`;
 }
 
@@ -349,7 +363,7 @@ function globalSettingsValue(data) {
   return { board: { width: numberValue(data, "board.width"), height: numberValue(data, "board.height") }, page: fixedPageSize, maximumKeywordLength: numberValue(data, "maximumKeywordLength"), maximumProcessingConcurrency: numberValue(data, "maximumProcessingConcurrency") };
 }
 function brandSettingsValue(data) {
-  return { topic: anchoredTextValue(data, "topic"), boardGame: regionValue(data, "boardGame"), keywordList: keywordListValue(data), pageNumber: anchoredTextValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
+  return { topic: anchoredTextValue(data, "topic"), quote: regionValue(data, "quote"), boardGame: regionValue(data, "boardGame"), keywordList: keywordListValue(data), pageNumber: anchoredTextValue(data, "pageNumber"), answerLine: { width: numberValue(data, "answerLine.width"), color: String(data.get("answerLine.color") ?? "") } };
 }
 
 function routeMarkup(routeName) {
@@ -446,30 +460,30 @@ function refreshBrandFormState(documentRoot) {
   const validationActive = isBrandValidationActive(state.selectedBrandId);
   const previewActive = isBrandPreviewActive(state.selectedBrandId);
   if (validationButton) {
-    validationButton.disabled = validationActive || state.brandDirty || state.brandSaving;
+    validationButton.disabled = validationActive || state.brandDirty || state.brandSaving || state.brandSettingsRequireSave;
     validationButton.textContent = validationActive ? "Validating…" : "Validate brand";
   }
   if (validationGuard) {
-    validationGuard.textContent = state.brandDirty || state.brandSaving
-      ? "Save or discard settings changes before validating or drawing a demo."
-      : "";
+    validationGuard.textContent = state.brandSettingsRequireSave
+      ? "Save Brand once to add the required Quote settings before validating or drawing a demo."
+      : state.brandDirty || state.brandSaving ? "Save or discard settings changes before validating or drawing a demo." : "";
   }
   const previewButton = documentRoot.querySelector("[data-brand-preview-button]");
   if (previewButton) {
-    previewButton.disabled = brandPreviewActionDisabled(state.brandDirty, state.brandSaving, previewActive);
+    previewButton.disabled = brandPreviewActionDisabled(state.brandDirty || state.brandSettingsRequireSave, state.brandSaving, previewActive);
     previewButton.textContent = previewActive ? "Drawing…" : "Draw demo";
   }
   const form = documentRoot.querySelector('[data-form="brand-settings"]');
   if (!form) return;
   const status = form.querySelector("[data-brand-save-status]");
   const button = form.querySelector("[data-brand-save-button]");
-  const statusName = state.brandSaving ? "saving" : state.brandDirty ? "dirty" : "saved";
+  const statusName = state.brandSaving ? "saving" : state.brandDirty || state.brandSettingsRequireSave ? "dirty" : "saved";
   if (status) {
     status.dataset.state = statusName;
-    status.textContent = state.brandSaving ? "Saving in background…" : state.brandDirty ? "Unsaved changes" : "All changes saved";
+    status.textContent = state.brandSaving ? "Saving in background…" : state.brandSettingsRequireSave ? "Settings update required" : state.brandDirty ? "Unsaved changes" : "All changes saved";
   }
   if (button) {
-    button.disabled = state.brandSaving || !state.brandDirty;
+    button.disabled = state.brandSaving || (!state.brandDirty && !state.brandSettingsRequireSave);
     button.textContent = state.brandSaving ? "Saving…" : "Save brand";
   }
   form.querySelectorAll("input").forEach(input => { input.disabled = state.brandSaving; });
@@ -567,7 +581,7 @@ function initializeWorkspace(documentRoot, render) {
     showBrandSaveMessage(documentRoot, message || "Brand settings could not be saved.");
   };
   const saveBrandForm = form => {
-    if (state.brandSaving || !state.brandDirty) return;
+    if (state.brandSaving || (!state.brandDirty && !state.brandSettingsRequireSave)) return;
     const settings = brandSettingsValue(new FormData(form));
     state.brandSaving = true;
     showBrandSaveMessage(documentRoot, null);
@@ -582,6 +596,7 @@ function initializeWorkspace(documentRoot, render) {
         }
 
         state.brandDirty = false;
+        state.brandSettingsRequireSave = false;
         state.brandBaseline = canonicalBrandSettings(settings);
         const destination = state.pendingNavigation;
         state.pendingNavigation = null;
@@ -745,7 +760,7 @@ function initializeWorkspace(documentRoot, render) {
         renderCurrentRoute();
       });
     }
-    if (target.dataset.action === "validate-brand" && !state.brandDirty && !state.brandSaving) {
+    if (target.dataset.action === "validate-brand" && !state.brandDirty && !state.brandSaving && !state.brandSettingsRequireSave) {
       const brandId = target.dataset.brandId;
       state.brandValidationFeedback = null;
       start("brand.validate", { brandId }, {
@@ -770,7 +785,7 @@ function initializeWorkspace(documentRoot, render) {
       });
     }
     if (target.dataset.action === "draw-brand-preview" &&
-        !brandPreviewActionDisabled(state.brandDirty, state.brandSaving, isBrandPreviewActive(target.dataset.brandId))) {
+        !brandPreviewActionDisabled(state.brandDirty || state.brandSettingsRequireSave, state.brandSaving, isBrandPreviewActive(target.dataset.brandId))) {
       const brandId = target.dataset.brandId;
       state.brandPreviewFeedback = null;
       start("brand.preview.draw", { brandId }, {
