@@ -66,6 +66,30 @@ public sealed class BrandValidationServiceTests
     }
 
     [Fact]
+    public async Task ChangedFrontLayoutMetadataNeedsValidationWithoutDecodingImage()
+    {
+        var root = CreateRoot();
+        try
+        {
+            await File.WriteAllTextAsync(LayoutPath(root), "layout metadata");
+            await SaveCurrentRecordAsync(root);
+            await using (var stream = new FileStream(FrontLayoutPath(root), FileMode.Append, FileAccess.Write, FileShare.None))
+            {
+                await stream.WriteAsync(new byte[] { 0 });
+            }
+
+            var state = await CreateService().CheckStateAsync(root, "demo");
+
+            Assert.Equal(BrandValidationStatus.NeedsValidation, state.Status);
+            Assert.Equal("brand_fingerprint_changed", state.ReasonCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task OutdatedCertificateNeedsValidationBeforeMetadataCheck()
     {
         var root = CreateRoot();
@@ -89,7 +113,7 @@ public sealed class BrandValidationServiceTests
     }
 
     [Fact]
-    public async Task ValidPngCreatesCertificate()
+    public async Task ValidRequiredLayoutsCreateCertificate()
     {
         var root = CreateRoot();
         try
@@ -102,12 +126,10 @@ public sealed class BrandValidationServiceTests
             Assert.True(result.IsSuccess);
             Assert.NotNull(record);
             Assert.False(record.RequiresValidation);
-            Assert.Collection(record.Assets, asset =>
-            {
-                Assert.Equal("page_layout.png", asset.RelativePath);
-                Assert.Equal(2588, asset.Width);
-                Assert.Equal(3375, asset.Height);
-            });
+            Assert.Collection(
+                record.Assets,
+                asset => AssertLayoutFact(asset, "page_layout.png"),
+                asset => AssertLayoutFact(asset, "front_layout.png"));
         }
         finally
         {
@@ -133,7 +155,7 @@ public sealed class BrandValidationServiceTests
 
             Assert.True(result.IsSuccess);
             Assert.Equal(
-                ["page_layout.png", "front/opening.png", "back/closing.jpg"],
+                ["page_layout.png", "front_layout.png", "front/opening.png", "back/closing.jpg"],
                 result.State.ValidatedAssets!.Select(asset => asset.RelativePath));
         }
         finally
@@ -207,6 +229,7 @@ public sealed class BrandValidationServiceTests
                 Assets =
                 [
                     new BrandValidationAssetFact("page_layout.png", 2588, 3375),
+                    new BrandValidationAssetFact("front_layout.png", 2588, 3375),
                     new BrandValidationAssetFact("front/tracked.png", 2588, 3375)
                 ]
             };
@@ -293,6 +316,46 @@ public sealed class BrandValidationServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("missing", "front_layout_not_found")]
+    [InlineData("corrupt", "front_layout_invalid")]
+    [InlineData("wrong-size", "front_layout_dimensions_invalid")]
+    [InlineData("wrong-format", "front_layout_format_invalid")]
+    public async Task InvalidFrontLayoutReturnsStableFailureAndWritesNoFirstCertificate(string scenario, string expectedCode)
+    {
+        var root = CreateRoot();
+        try
+        {
+            SaveImage(LayoutPath(root), 2588, 3375, ImageFormat.Png);
+            var frontLayoutPath = FrontLayoutPath(root);
+            switch (scenario)
+            {
+                case "missing":
+                    File.Delete(frontLayoutPath);
+                    break;
+                case "corrupt":
+                    await File.WriteAllTextAsync(frontLayoutPath, "broken");
+                    break;
+                case "wrong-size":
+                    SaveImage(frontLayoutPath, 100, 100, ImageFormat.Png);
+                    break;
+                case "wrong-format":
+                    SaveImage(frontLayoutPath, 2588, 3375, ImageFormat.Jpeg);
+                    break;
+            }
+
+            var result = await CreateService().ValidateAsync(root, "demo");
+
+            var failure = Assert.Single(result.Failures, item => item.Code == expectedCode);
+            Assert.Equal("front_layout.png", failure.Target);
+            Assert.False(File.Exists(Path.Combine(root, "brands", "demo", "brand.validation.json")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task FailedRevalidationMarksPreviousCertificateRequired()
     {
@@ -332,7 +395,17 @@ public sealed class BrandValidationServiceTests
         fingerprint,
         DateTimeOffset.UtcNow,
         false,
-        [new BrandValidationAssetFact("page_layout.png", 2588, 3375)]);
+        [
+            new BrandValidationAssetFact("page_layout.png", 2588, 3375),
+            new BrandValidationAssetFact("front_layout.png", 2588, 3375)
+        ]);
+
+    private static void AssertLayoutFact(BrandValidationAssetFact asset, string relativePath)
+    {
+        Assert.Equal(relativePath, asset.RelativePath);
+        Assert.Equal(2588, asset.Width);
+        Assert.Equal(3375, asset.Height);
+    }
 
     private static void SaveImage(string path, int width, int height, ImageFormat format)
     {
@@ -344,8 +417,11 @@ public sealed class BrandValidationServiceTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"wordsearchbook-validation-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(root, "brands", "demo"));
+        SaveImage(FrontLayoutPath(root), 2588, 3375, ImageFormat.Png);
         return root;
     }
 
     private static string LayoutPath(string root) => Path.Combine(root, "brands", "demo", "page_layout.png");
+
+    private static string FrontLayoutPath(string root) => Path.Combine(root, "brands", "demo", "front_layout.png");
 }

@@ -29,6 +29,9 @@ internal static class BrandAssetDiscovery
     public static string ResolveLayoutPath(string rootPath, string brandId) =>
         Path.Combine(ResolveBrandDirectory(rootPath, brandId), BrandValidationDefinition.PageLayoutRelativePath);
 
+    public static string ResolveFrontLayoutPath(string rootPath, string brandId) =>
+        Path.Combine(ResolveBrandDirectory(rootPath, brandId), BrandValidationDefinition.FrontLayoutRelativePath);
+
     public static IReadOnlyList<DiscoveredBrandAssetFolder> DiscoverOptionalFolders(
         string rootPath,
         string brandId)
@@ -55,11 +58,17 @@ internal static class BrandAssetDiscovery
         var layoutPath = ResolveLayoutPath(rootPath, brandId);
         var layout = new FileInfo(layoutPath);
         layout.Refresh();
+        var frontLayoutPath = ResolveFrontLayoutPath(rootPath, brandId);
+        var frontLayout = new FileInfo(frontLayoutPath);
+        frontLayout.Refresh();
         var metadata = new List<BrandValidationFileMetadata>
         {
             layout.Exists
                 ? CreateMetadata(BrandValidationDefinition.PageLayoutRelativePath, layout)
-                : BrandValidationFileMetadata.Missing(BrandValidationDefinition.PageLayoutRelativePath)
+                : BrandValidationFileMetadata.Missing(BrandValidationDefinition.PageLayoutRelativePath),
+            frontLayout.Exists
+                ? CreateMetadata(BrandValidationDefinition.FrontLayoutRelativePath, frontLayout)
+                : BrandValidationFileMetadata.Missing(BrandValidationDefinition.FrontLayoutRelativePath)
         };
 
         foreach (var asset in DiscoverTrackedFiles(rootPath, brandId))

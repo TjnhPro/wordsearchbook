@@ -29,6 +29,17 @@ public sealed class JsonWordSearchSettingsWriterTests
                 Assert.Equal(2588, layout.Width);
                 Assert.Equal(3375, layout.Height);
             }
+            var frontLayoutPath = Path.Combine(root, "brands", "new-brand", "front_layout.png");
+            Assert.True(File.Exists(frontLayoutPath));
+            using (var frontLayout = new Bitmap(frontLayoutPath))
+            {
+                Assert.Equal(2588, frontLayout.Width);
+                Assert.Equal(3375, frontLayout.Height);
+                Assert.InRange(frontLayout.HorizontalResolution, 299, 301);
+                Assert.InRange(frontLayout.VerticalResolution, 299, 301);
+                Assert.Equal(0, frontLayout.GetPixel(0, 0).A);
+                Assert.Equal(0, frontLayout.GetPixel(frontLayout.Width - 1, frontLayout.Height - 1).A);
+            }
             Assert.True(Directory.Exists(Path.Combine(root, "brands", "new-brand", "front")));
             Assert.True(Directory.Exists(Path.Combine(root, "brands", "new-brand", "back")));
             Assert.Empty(Directory.EnumerateDirectories(Path.Combine(root, "brands"), "*.tmp"));
