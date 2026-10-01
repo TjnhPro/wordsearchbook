@@ -14,25 +14,19 @@ public partial class CloseApplicationDialog : Window
 
     internal CloseApplicationDialog(int activeTaskCount, Func<Task> closeAsync)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(activeTaskCount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(activeTaskCount);
         ArgumentNullException.ThrowIfNull(closeAsync);
 
         this.closeAsync = closeAsync;
         InitializeComponent();
-        if (activeTaskCount == 0)
-        {
-            DialogTitle.Text = "Close Word Search Book?";
-            ConfirmationMessage.Text = "The application is ready to close.";
-        }
-        else
-        {
-            ConfirmationMessage.Text = activeTaskCount == 1
-                ? "1 background task is still running. Closing will cancel it before Word Search Book exits."
-                : $"{activeTaskCount} background tasks are still running. Closing will cancel them before Word Search Book exits.";
-        }
+        ConfirmationMessage.Text = activeTaskCount == 1
+            ? "1 background task is still running. Closing will cancel it before Word Search Book exits."
+            : $"{activeTaskCount} background tasks are still running. Closing will cancel them before Word Search Book exits.";
     }
 
     internal bool IsClosing => closing;
+
+    internal event EventHandler? ShutdownReady;
 
     private void OnKeepOpenClick(object sender, RoutedEventArgs e)
     {
@@ -47,12 +41,11 @@ public partial class CloseApplicationDialog : Window
         }
 
         closing = true;
-        DialogEyebrow.Text = "CLOSING APPLICATION";
-        DialogTitle.Text = "Closing Word Search Book";
-        ConfirmationMessage.Visibility = Visibility.Collapsed;
+        ConfirmationHeader.Visibility = Visibility.Collapsed;
+        ConfirmationState.Visibility = Visibility.Collapsed;
         ConfirmationActions.Visibility = Visibility.Collapsed;
         ClosingState.Visibility = Visibility.Visible;
-        await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Render);
+        await Dispatcher.Yield(DispatcherPriority.Render);
 
         try
         {
@@ -65,7 +58,7 @@ public partial class CloseApplicationDialog : Window
         finally
         {
             closeCompleted = true;
-            DialogResult = true;
+            ShutdownReady?.Invoke(this, EventArgs.Empty);
         }
     }
 
