@@ -21,10 +21,12 @@ public sealed class JsonWordSearchSettingsReaderTests
             Assert.Equal(2588, settings.Page.Width);
             Assert.Equal(3375, settings.Page.Height);
             Assert.Equal(13, settings.MaximumKeywordLength);
+            Assert.Equal(4, settings.MaximumProcessingConcurrency);
             var json = await File.ReadAllTextAsync(Path.Combine(root, "settings.json"));
             Assert.Contains("\"board\"", json, StringComparison.Ordinal);
             Assert.Contains("\"page\"", json, StringComparison.Ordinal);
             Assert.Contains("\"maximumKeywordLength\": 13", json, StringComparison.Ordinal);
+            Assert.Contains("\"maximumProcessingConcurrency\": 4", json, StringComparison.Ordinal);
             Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
         }
         finally
