@@ -10,9 +10,19 @@ public sealed record WordSearchTopicArtifactSet(
 
 public interface IWordSearchCachePublisher
 {
-    Task<WordSearchGenerationResult> PublishAsync(
+    Task<IWordSearchCacheSession> OpenAsync(
         WordSearchGenerationRequest request,
         WordSearchSettingsBundle settings,
-        IReadOnlyList<WordSearchTopicArtifactSet> topics,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IWordSearchCacheSession : IAsyncDisposable
+{
+    ValueTask<GeneratedWordSearchTopic> PublishTopicAsync(
+        WordSearchTopicArtifactSet topic,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<WordSearchGenerationResult> CommitAsync(
+        IReadOnlyList<GeneratedWordSearchTopic> topics,
         CancellationToken cancellationToken = default);
 }

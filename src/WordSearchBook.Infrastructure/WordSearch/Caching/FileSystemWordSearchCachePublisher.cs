@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using WordSearchBook.Core.WordSearch.Caching;
 using WordSearchBook.Core.WordSearch.Contracts;
@@ -13,61 +14,67 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
         WriteIndented = true
     };
 
-    public async Task<WordSearchGenerationResult> PublishAsync(
+    public Task<IWordSearchCacheSession> OpenAsync(
         WordSearchGenerationRequest request,
         WordSearchSettingsBundle settings,
-        IReadOnlyList<WordSearchTopicArtifactSet> topics,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(settings);
-        ArgumentNullException.ThrowIfNull(topics);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        var cacheRoot = Path.Combine(
-            request.RootPath,
-            "input",
-            request.BookId,
-            ".workspace",
-            "cache");
-        var finalDirectory = Path.Combine(cacheRoot, request.BrandId);
-        var stagingDirectory = Path.Combine(cacheRoot, $".{request.BrandId}.staging-{Guid.NewGuid():N}");
-
+        var cacheRoot = Path.Combine(request.RootPath, "input", request.BookId, ".workspace", "cache");
         try
         {
-            Directory.CreateDirectory(stagingDirectory);
-            var generatedTopics = new List<GeneratedWordSearchTopic>(topics.Count);
-            var manifestTopics = new List<ManifestTopic>(topics.Count);
+            Directory.CreateDirectory(Path.Combine(cacheRoot, "topics"));
+            DeleteFile(Path.Combine(cacheRoot, "manifest.json"));
+            DeleteFile(Path.Combine(cacheRoot, "manifest.pending.json"));
+            return Task.FromResult<IWordSearchCacheSession>(new Session(request, settings, cacheRoot));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new WordSearchGenerationException(
+                "cache_open_failed",
+                $"Word search cache could not be prepared: {exception.Message}",
+                exception);
+        }
+    }
 
-            foreach (var topicSet in topics)
+    private sealed class Session(
+        WordSearchGenerationRequest request,
+        WordSearchSettingsBundle settings,
+        string cacheRoot) : IWordSearchCacheSession
+    {
+        private readonly ConcurrentDictionary<int, ManifestTopic> manifestTopics = [];
+        private int committed;
+
+        public async ValueTask<GeneratedWordSearchTopic> PublishTopicAsync(
+            WordSearchTopicArtifactSet topicSet,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(topicSet);
+            cancellationToken.ThrowIfCancellationRequested();
+            var artifactByKind = ValidateArtifacts(topicSet);
+            var relativeTopicDirectory = Path.Combine("topics", topicSet.Topic.Index.ToString("000"));
+            var topicDirectory = Path.Combine(cacheRoot, relativeTopicDirectory);
+
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var artifactByKind = ValidateArtifacts(topicSet);
-                var relativeTopicDirectory = Path.Combine("topics", topicSet.Topic.Index.ToString("000"));
-                var topicDirectory = Path.Combine(stagingDirectory, relativeTopicDirectory);
                 Directory.CreateDirectory(topicDirectory);
-
                 var publishedArtifacts = new List<WordSearchArtifact>(artifactByKind.Count);
                 var manifestArtifactPaths = new Dictionary<string, string>(StringComparer.Ordinal);
-
                 foreach (var kind in Enum.GetValues<WordSearchArtifactKind>())
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var rendered = artifactByKind[kind];
                     var fileName = FileName(kind);
                     var relativePath = Path.Combine(relativeTopicDirectory, fileName).Replace('\\', '/');
-                    await File.WriteAllBytesAsync(
-                        Path.Combine(topicDirectory, fileName),
-                        rendered.Content,
-                        cancellationToken);
+                    await File.WriteAllBytesAsync(Path.Combine(topicDirectory, fileName), rendered.Content, cancellationToken);
                     publishedArtifacts.Add(new WordSearchArtifact(kind, relativePath, rendered.Width, rendered.Height));
                     manifestArtifactPaths.Add(ManifestName(kind), relativePath);
                 }
 
-                generatedTopics.Add(new GeneratedWordSearchTopic(
-                    topicSet.Topic.Index,
-                    topicSet.Topic.Name,
-                    publishedArtifacts,
-                    topicSet.Placements));
-                manifestTopics.Add(new ManifestTopic(
+                var manifestTopic = new ManifestTopic(
                     topicSet.Topic.Index,
                     topicSet.Topic.Name,
                     topicSet.Topic.Entries.Select(entry => new ManifestEntry(
@@ -77,45 +84,150 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
                     manifestArtifactPaths,
                     topicSet.Placements.Select(placement => new ManifestPlacement(
                         placement.WordSearchKey,
-                        placement.Cells.Select(cell => new ManifestCell(cell.X, cell.Y)).ToArray())).ToArray()));
-            }
+                        placement.Cells.Select(cell => new ManifestCell(cell.X, cell.Y)).ToArray())).ToArray());
+                if (!manifestTopics.TryAdd(topicSet.Topic.Index, manifestTopic))
+                {
+                    throw new WordSearchGenerationException(
+                        "topic_work_key_duplicate",
+                        $"Topic work key 'topic:{topicSet.Topic.Index}' is duplicated.");
+                }
 
-            var manifest = new ManifestDocument(
-                ManifestSchemaVersion,
-                request.BookId,
-                request.BrandId,
-                settings.Global.Board,
-                settings.Global.Page,
-                manifestTopics);
-            var stagingManifestPath = Path.Combine(stagingDirectory, "manifest.json");
-            await using (var manifestStream = File.Create(stagingManifestPath))
+                return new GeneratedWordSearchTopic(
+                    topicSet.Topic.Index,
+                    topicSet.Topic.Name,
+                    publishedArtifacts,
+                    topicSet.Placements);
+            }
+            catch (WordSearchGenerationException)
             {
-                await JsonSerializer.SerializeAsync(manifestStream, manifest, JsonOptions, cancellationToken);
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                throw new WordSearchGenerationException(
+                    "cache_topic_publish_failed",
+                    $"Topic {topicSet.Topic.Index} '{topicSet.Topic.Name}' could not be written to cache: {exception.Message}",
+                    exception);
+            }
+        }
+
+        public async ValueTask<WordSearchGenerationResult> CommitAsync(
+            IReadOnlyList<GeneratedWordSearchTopic> topics,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(topics);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Interlocked.Exchange(ref committed, 1) != 0)
+            {
+                throw new InvalidOperationException("The cache session has already been committed.");
             }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            ReplaceDirectory(stagingDirectory, finalDirectory);
-            return new WordSearchGenerationResult(
-                request.BookId,
-                request.BrandId,
-                Path.Combine(finalDirectory, "manifest.json"),
-                generatedTopics);
+            var orderedTopics = topics.OrderBy(topic => topic.Index).ToArray();
+            if (orderedTopics.Length != manifestTopics.Count ||
+                orderedTopics.Any(topic => !manifestTopics.ContainsKey(topic.Index)))
+            {
+                throw new WordSearchGenerationException(
+                    "cache_manifest_incomplete",
+                    "The cache manifest does not contain every processed Topic.");
+            }
+
+            var manifestPath = Path.Combine(cacheRoot, "manifest.json");
+            var pendingManifestPath = Path.Combine(cacheRoot, "manifest.pending.json");
+            try
+            {
+                RemoveStaleTopicDirectories(orderedTopics.Select(topic => topic.Index).ToHashSet());
+                RemoveLegacyBrandCaches();
+                RemoveUnknownCacheFiles();
+                var manifest = new ManifestDocument(
+                    ManifestSchemaVersion,
+                    request.BookId,
+                    request.BrandId,
+                    settings.Global.Board,
+                    settings.Global.Page,
+                    orderedTopics.Select(topic => manifestTopics[topic.Index]).ToArray());
+                await using (var stream = new FileStream(
+                                 pendingManifestPath,
+                                 FileMode.Create,
+                                 FileAccess.Write,
+                                 FileShare.None,
+                                 64 * 1024,
+                                 FileOptions.Asynchronous | FileOptions.WriteThrough))
+                {
+                    await JsonSerializer.SerializeAsync(stream, manifest, JsonOptions, cancellationToken);
+                    await stream.FlushAsync(cancellationToken);
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(pendingManifestPath, manifestPath, overwrite: true);
+                return new WordSearchGenerationResult(
+                    request.BookId,
+                    request.BrandId,
+                    manifestPath,
+                    orderedTopics);
+            }
+            catch (WordSearchGenerationException)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+                throw new WordSearchGenerationException(
+                    "cache_publish_failed",
+                    $"Word search cache manifest could not be published: {exception.Message}",
+                    exception);
+            }
+            finally
+            {
+                TryDeleteFile(pendingManifestPath);
+            }
         }
-        catch (WordSearchGenerationException)
+
+        public ValueTask DisposeAsync()
         {
-            throw;
+            TryDeleteFile(Path.Combine(cacheRoot, "manifest.pending.json"));
+            return ValueTask.CompletedTask;
         }
-        catch (OperationCanceledException)
+
+        private void RemoveStaleTopicDirectories(IReadOnlySet<int> currentTopicIndexes)
         {
-            throw;
+            var topicsRoot = Path.Combine(cacheRoot, "topics");
+            foreach (var directory in Directory.EnumerateDirectories(topicsRoot))
+            {
+                if (!int.TryParse(Path.GetFileName(directory), out var index) || !currentTopicIndexes.Contains(index))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+
+        private void RemoveLegacyBrandCaches()
         {
-            throw new WordSearchGenerationException("cache_publish_failed", $"Word search cache could not be published: {exception.Message}", exception);
+            foreach (var directory in Directory.EnumerateDirectories(cacheRoot))
+            {
+                if (!string.Equals(Path.GetFileName(directory), "topics", StringComparison.OrdinalIgnoreCase))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
         }
-        finally
+
+        private void RemoveUnknownCacheFiles()
         {
-            TryDeleteDirectory(stagingDirectory);
+            foreach (var file in Directory.EnumerateFiles(cacheRoot))
+            {
+                if (!string.Equals(Path.GetFileName(file), "manifest.pending.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(file);
+                }
+            }
         }
     }
 
@@ -148,41 +260,23 @@ public sealed class FileSystemWordSearchCachePublisher : IWordSearchCachePublish
         return artifacts;
     }
 
-    private static void ReplaceDirectory(string stagingDirectory, string finalDirectory)
+    private static void DeleteFile(string path)
     {
-        if (!Directory.Exists(finalDirectory))
+        if (File.Exists(path))
         {
-            Directory.Move(stagingDirectory, finalDirectory);
-            return;
+            File.Delete(path);
         }
-
-        var backupDirectory = $"{finalDirectory}.backup-{Guid.NewGuid():N}";
-        Directory.Move(finalDirectory, backupDirectory);
-        try
-        {
-            Directory.Move(stagingDirectory, finalDirectory);
-        }
-        catch
-        {
-            Directory.Move(backupDirectory, finalDirectory);
-            throw;
-        }
-
-        TryDeleteDirectory(backupDirectory);
     }
 
-    private static void TryDeleteDirectory(string path)
+    private static void TryDeleteFile(string path)
     {
         try
         {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
+            DeleteFile(path);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Stale staging/backup data can be cleaned by a later maintenance pass.
+            // A later cache session will clean the stable pending file.
         }
     }
 

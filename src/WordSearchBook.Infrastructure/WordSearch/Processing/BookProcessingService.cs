@@ -97,7 +97,8 @@ public sealed class BookProcessingService(
             progress?.Report(new BookProcessingProgress("Generating puzzle and answer pages"));
             var generation = await generationService.GenerateAsync(
                 new WordSearchGenerationRequest(rootPath, request.BookId, request.BrandId),
-                cancellationToken);
+                cancellationToken,
+                new GenerationProgress(progress));
 
             Directory.CreateDirectory(stagingDirectory);
             var stagingAnswerDirectory = Path.Combine(stagingDirectory, "answer");
@@ -436,6 +437,16 @@ public sealed class BookProcessingService(
         {
             // Unpublished temporary data can be cleaned by a later run.
         }
+    }
+
+    private sealed class GenerationProgress(IProgress<BookProcessingProgress>? progress)
+        : IProgress<WordSearchGenerationProgress>
+    {
+        public void Report(WordSearchGenerationProgress value) => progress?.Report(new BookProcessingProgress(
+            "Generating topics",
+            value.Completed,
+            value.Total,
+            $"Topic {value.TopicIndex}: {value.TopicName}"));
     }
 
     private sealed record PdfManifest(

@@ -1,8 +1,6 @@
 using WordSearchBook.Core.WordSearch.Caching;
 using WordSearchBook.Core.WordSearch.Contracts;
-using WordSearchBook.Core.WordSearch.Generation;
 using WordSearchBook.Core.WordSearch.Input;
-using WordSearchBook.Core.WordSearch.Rendering;
 using WordSearchBook.Core.WordSearch.Settings;
 using WordSearchBook.Core.WordSearch.Validation;
 
@@ -11,15 +9,14 @@ namespace WordSearchBook.Core.WordSearch.Application;
 public sealed class WordSearchBookGenerationService(
     IWordSearchInputReader inputReader,
     IWordSearchSettingsReader settingsReader,
-    IWordSearchPuzzleGenerator puzzleGenerator,
-    IWordSearchBoardRenderer boardRenderer,
-    IWordSearchPageRenderer pageRenderer,
+    IWordSearchTopicBatchProcessor topicBatchProcessor,
     IWordSearchCachePublisher cachePublisher,
     IBrandValidationService validationService) : IWordSearchBookGenerationService
 {
     public async Task<WordSearchGenerationResult> GenerateAsync(
         WordSearchGenerationRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<WordSearchGenerationProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -47,32 +44,15 @@ public sealed class WordSearchBookGenerationService(
         var dataCsvPath = Path.Combine(rootPath, "input", request.BookId, "data.csv");
         var pageLayoutPath = Path.Combine(rootPath, "brands", request.BrandId, "page_layout.png");
         var topics = await inputReader.ReadAsync(dataCsvPath, settings.Global.MaximumKeywordLength, cancellationToken);
-        var generatedTopics = new List<WordSearchTopicArtifactSet>(topics.Count);
-
-        foreach (var topic in topics)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var puzzle = puzzleGenerator.Generate(
-                topic.Entries.Select(entry => entry.WordSearchKey).ToArray(),
-                settings.Global.Board);
-            var board = boardRenderer.RenderData(puzzle, settings.Global.Board, settings.Brand.BoardGame);
-            var answerBoard = boardRenderer.RenderAnswer(
-                puzzle,
-                settings.Global.Board,
-                settings.Brand.BoardGame,
-                settings.Brand.AnswerLine);
-            var artifacts = new RenderedWordSearchArtifact[]
-            {
-                board,
-                answerBoard,
-                pageRenderer.Render(pageLayoutPath, topic, topic.Index, board, settings, WordSearchArtifactKind.Page),
-                pageRenderer.Render(pageLayoutPath, topic, topic.Index, answerBoard, settings, WordSearchArtifactKind.PageAnswer)
-            };
-
-            generatedTopics.Add(new WordSearchTopicArtifactSet(topic, artifacts, puzzle.Placements));
-        }
-
-        return await cachePublisher.PublishAsync(normalizedRequest, settings, generatedTopics, cancellationToken);
+        await using var cacheSession = await cachePublisher.OpenAsync(normalizedRequest, settings, cancellationToken);
+        var generatedTopics = await topicBatchProcessor.ProcessAsync(
+            topics,
+            pageLayoutPath,
+            settings,
+            cacheSession,
+            progress,
+            cancellationToken);
+        return await cacheSession.CommitAsync(generatedTopics, cancellationToken);
     }
 
     private static string RequireValue(string value, string parameterName)

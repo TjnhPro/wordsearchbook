@@ -15,6 +15,12 @@ public sealed record WordSearchGenerationRequest(
     string BookId,
     string BrandId);
 
+public sealed record WordSearchGenerationProgress(
+    int Completed,
+    int Total,
+    int TopicIndex,
+    string TopicName);
+
 public sealed record WordSearchArtifact(
     WordSearchArtifactKind Kind,
     string RelativePath,

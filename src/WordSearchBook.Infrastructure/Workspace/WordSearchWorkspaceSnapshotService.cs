@@ -1,3 +1,4 @@
+using System.Text.Json;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Core.WordSearch.Contracts;
 using WordSearchBook.Core.WordSearch.Domain;
@@ -183,18 +184,22 @@ public sealed class WordSearchWorkspaceSnapshotService(
     private static IReadOnlyList<string> ReadCachedBrands(string bookDirectory)
     {
         var cacheRoot = Path.Combine(bookDirectory, ".workspace", "cache");
-        if (!Directory.Exists(cacheRoot))
+        var manifestPath = Path.Combine(cacheRoot, "manifest.json");
+        if (!File.Exists(manifestPath))
         {
             return [];
         }
 
-        return Directory.EnumerateDirectories(cacheRoot)
-            .Where(directory => File.Exists(Path.Combine(directory, "manifest.json")))
-            .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Cast<string>()
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        try
+        {
+            using var manifest = JsonDocument.Parse(File.ReadAllBytes(manifestPath));
+            var brandId = manifest.RootElement.GetProperty("brandId").GetString();
+            return string.IsNullOrWhiteSpace(brandId) ? [] : [brandId];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return [];
+        }
     }
 
     private static WorkspaceIssue Issue(WordSearchGenerationException exception) => new(exception.Code, exception.Message);
