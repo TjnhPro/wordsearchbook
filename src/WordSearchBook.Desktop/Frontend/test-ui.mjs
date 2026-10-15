@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandQrPageEditor, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
+const { bookPageCountSummary, activateRoute, bookDataValidationPresentation, bookOutputPresentation, bookRowsMarkup, bookValidationFailureContext, brandAssetFolderMarkup, brandLayoutPanels, brandNavigationDisposition, brandPreviewActionDisabled, brandQrPageEditor, brandSettingsValue, brandValidationPresentation, canGenerateWithBrand, connectToDesktop, createDebouncedAction, filterBooks, filterBrands, globalSettingsValue, hasBrandSettingsChanged, shouldRenderForTaskUpdate, validateBrandFolderName } = require("./js/app.js");
 
 function createHarness() {
   let messageHandler;
@@ -348,4 +348,13 @@ test("disables preview drawing for unsaved, saving, or active brand state", () =
   assert.equal(brandPreviewActionDisabled(true, false, false), true);
   assert.equal(brandPreviewActionDisabled(false, true, false), true);
   assert.equal(brandPreviewActionDisabled(false, false, true), true);
+});
+
+
+test("summarizes all six PDF page groups in assembly order", () => {
+  assert.equal(bookPageCountSummary({
+    bookFrontPageCount: 1, frontPageCount: 2, puzzlePageCount: 3,
+    backPageCount: 4, bookBackPageCount: 5, qrPageCount: 1
+  }), "1 book front · 2 brand front · 3 puzzle · 4 brand back · 5 book back · 1 QR");
+  assert.equal(bookPageCountSummary(), "0 book front · 0 brand front · 0 puzzle · 0 brand back · 0 book back · 0 QR");
 });

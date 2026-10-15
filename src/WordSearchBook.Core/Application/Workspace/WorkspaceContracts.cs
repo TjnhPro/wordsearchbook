@@ -27,7 +27,9 @@ public sealed record WorkspaceBookOutput(
     int AnswerCount = 0,
     long AnswerLengthBytes = 0,
     DateTimeOffset? ProcessedAtUtc = null,
-    string? ReasonCode = null);
+    string? ReasonCode = null,
+    int BookFrontPageCount = 0,
+    int BookBackPageCount = 0);
 
 public sealed record WorkspaceBrandAssetFile(
     string Name,

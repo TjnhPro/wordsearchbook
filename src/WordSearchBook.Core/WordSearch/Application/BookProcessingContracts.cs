@@ -31,7 +31,9 @@ public sealed record BookProcessingResult(
     int PdfPageCount,
     long PdfLengthBytes,
     IReadOnlyList<BookAnswerOutput> Answers,
-    DateTimeOffset ProcessedAtUtc);
+    DateTimeOffset ProcessedAtUtc,
+    int BookFrontPageCount = 0,
+    int BookBackPageCount = 0);
 
 public interface IBookProcessingService
 {
