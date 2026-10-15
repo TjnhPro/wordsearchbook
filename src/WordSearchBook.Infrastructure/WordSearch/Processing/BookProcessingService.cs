@@ -18,7 +18,7 @@ public sealed class BookProcessingService(
     IBookOutputPublisher outputPublisher,
     IBookProcessingSessionGate sessionGate) : IBookProcessingService
 {
-    private const int ManifestSchemaVersion = 2;
+    private const int ManifestSchemaVersion = 3;
     private const int PageWidth = 2588;
     private const int PageHeight = 3375;
     private const int OutputDpi = 300;
@@ -112,6 +112,10 @@ public sealed class BookProcessingService(
                         $"Brand '{request.BrandId}' assets must be validated before processing.");
                 }
 
+                progress?.Report(new BookProcessingProgress("Checking book front/back images"));
+                var bookAssets = BookPageAssets.Capture(bookDirectory);
+                bookAssets.Validate(cancellationToken);
+
                 var settings = await settingsReader.ReadAsync(rootPath, request.BrandId, cancellationToken);
 
                 var settingsSignature = await CalculateSettingsSignatureAsync(rootPath, request.BrandId, cancellationToken);
@@ -161,9 +165,11 @@ public sealed class BookProcessingService(
                     qrPages = [];
                 }
 
-                var orderedPdfPages = frontPages
+                var orderedPdfPages = bookAssets.Front
+                    .Concat(frontPages)
                     .Concat(puzzlePages)
                     .Concat(backPages)
+                    .Concat(bookAssets.Back)
                     .Concat(qrPages)
                     .ToArray();
                 var preparedPdf = await pdfExporter.PrepareAsync(
@@ -193,6 +199,13 @@ public sealed class BookProcessingService(
                         "Settings changed while the book was being processed.");
                 }
 
+                if (!string.Equals(BookPageAssets.Capture(bookDirectory).Fingerprint, bookAssets.Fingerprint, StringComparison.Ordinal))
+                {
+                    throw new WordSearchGenerationException(
+                        "book_assets_changed_during_processing",
+                        "Book front/back images changed while the book was being processed.");
+                }
+
                 var processedAt = DateTimeOffset.UtcNow;
                 var answers = preparedAnswers.Select(answer => answer.Output).ToArray();
                 var manifest = new OutputManifest(
@@ -214,7 +227,10 @@ public sealed class BookProcessingService(
                         PageWidth,
                         PageHeight,
                         OutputDpi),
-                    answers);
+                    answers,
+                    bookAssets.Front.Count,
+                    bookAssets.Back.Count,
+                    bookAssets.Fingerprint);
                 await WriteManifestAsync(pendingManifestPath, manifest, cancellationToken);
 
                 progress?.Report(new BookProcessingProgress("Publishing output"));
@@ -239,7 +255,9 @@ public sealed class BookProcessingService(
                     preparedPdf.PageCount,
                     preparedPdf.LengthBytes,
                     answers,
-                    processedAt);
+                    processedAt,
+                    bookAssets.Front.Count,
+                    bookAssets.Back.Count);
             }
             catch (OperationCanceledException)
             {
@@ -393,7 +411,10 @@ public sealed class BookProcessingService(
         int BackPageCount,
         int QrPageCount,
         PdfManifest Pdf,
-        IReadOnlyList<BookAnswerOutput> Answers);
+        IReadOnlyList<BookAnswerOutput> Answers,
+        int BookFrontPageCount,
+        int BookBackPageCount,
+        string BookAssetsFingerprint);
 
     internal sealed class NaturalFileNameComparer : IComparer<string?>
     {

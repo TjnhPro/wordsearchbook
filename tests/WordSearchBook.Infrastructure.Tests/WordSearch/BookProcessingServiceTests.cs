@@ -13,7 +13,7 @@ using WordSearchBook.Infrastructure.WordSearch.Processing;
 
 namespace WordSearchBook.Infrastructure.Tests.WordSearch;
 
-public sealed class BookProcessingServiceTests
+public sealed partial class BookProcessingServiceTests
 {
     [Fact]
     public void NaturalPageOrderingPlacesNumericTwoBeforeTen()
@@ -247,7 +247,7 @@ public sealed class BookProcessingServiceTests
             var manifestPath = Path.Combine(root, "input", "sample-book", ".workspace", "output.manifest.json");
             using (var manifest = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath)))
             {
-                Assert.Equal(2, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
+                Assert.Equal(3, manifest.RootElement.GetProperty("schemaVersion").GetInt32());
                 Assert.Equal(1, manifest.RootElement.GetProperty("qrPageCount").GetInt32());
             }
 
@@ -269,10 +269,11 @@ public sealed class BookProcessingServiceTests
         }
     }
 
-    private static ServiceProvider BuildServices()
+    private static ServiceProvider BuildServices(IBookInteriorPdfExporter? pdfExporter = null)
     {
         var services = new ServiceCollection();
         services.AddWordSearchBookInfrastructure();
+        if (pdfExporter is not null) services.AddSingleton(pdfExporter);
         return services.BuildServiceProvider();
     }
 

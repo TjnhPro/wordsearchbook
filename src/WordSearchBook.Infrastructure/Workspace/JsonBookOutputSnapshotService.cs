@@ -3,12 +3,13 @@ using System.Text.Json;
 using WordSearchBook.Core.Application.Workspace;
 using WordSearchBook.Core.WordSearch.Application;
 using WordSearchBook.Core.WordSearch.Validation;
+using WordSearchBook.Infrastructure.WordSearch.Processing;
 
 namespace WordSearchBook.Infrastructure.Workspace;
 
 public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
 {
-    private const int ManifestSchemaVersion = 2;
+    private const int ManifestSchemaVersion = 3;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = false
@@ -75,6 +76,11 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
                 return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_settings_changed" };
             }
 
+            if (!string.Equals(BookPageAssets.Capture(bookDirectory).Fingerprint, manifest.BookAssetsFingerprint, StringComparison.Ordinal))
+            {
+                return summary with { Status = BookOutputStatus.Stale, ReasonCode = "output_book_assets_changed" };
+            }
+
             var outputDirectory = Path.Combine(bookDirectory, "output");
             var pdfPath = ResolveOutputPath(outputDirectory, manifest.Pdf.RelativePath);
             if (!File.Exists(pdfPath) || new FileInfo(pdfPath).Length != manifest.Pdf.LengthBytes)
@@ -128,7 +134,9 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
         manifest.Pdf.PageCount,
         manifest.Answers.Count,
         manifest.Answers.Sum(answer => answer.LengthBytes),
-        manifest.ProcessedAtUtc);
+        manifest.ProcessedAtUtc,
+        BookFrontPageCount: manifest.BookFrontPageCount,
+        BookBackPageCount: manifest.BookBackPageCount);
 
     private static string ResolveBookDirectory(string rootPath, string bookId)
     {
@@ -203,5 +211,8 @@ public sealed class JsonBookOutputSnapshotService : IBookOutputSnapshotService
         int BackPageCount,
         int QrPageCount,
         PdfManifest Pdf,
-        IReadOnlyList<BookAnswerOutput> Answers);
+        IReadOnlyList<BookAnswerOutput> Answers,
+        int BookFrontPageCount,
+        int BookBackPageCount,
+        string? BookAssetsFingerprint);
 }
